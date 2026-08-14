@@ -3,6 +3,10 @@
 /node_modules
 /build
 
+# Markdown docs
+*.md
+!README.md
+
 # Logs
 logs
 *.log

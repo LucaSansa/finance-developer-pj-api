@@ -11,6 +11,7 @@ import {
 } from '@nestjs/swagger';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserResponseDto } from './dto/user-response.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('users')
 @ApiTags('Users')
@@ -25,7 +26,7 @@ export class UserController {
     return this.userService.create(data);
   }
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   @Get('me')
   @ApiOperation({ summary: 'Retorna os dados do usuário autenticado' })
   @ApiOkResponse({ type: UserResponseDto })

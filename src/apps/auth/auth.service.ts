@@ -3,20 +3,24 @@ import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
+import { createHash } from 'crypto';
+import { ConfigService } from '@nestjs/config';
+import { JwtPayload } from './types/jwt-payload.type';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private userService: UserService,
-    private jwtService: JwtService,
+    private readonly userService: UserService,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async login(dto: LoginDto) {
-    const { email, password } = dto;
+    const user = await this.validateUser(dto.email, dto.password);
 
-    const user = await this.validateUser(email, password);
+    const tokens = await this.generateTokens(user.id, user.email);
 
-    const payload = { sub: user.id, email: user.email };
+    await this.userService.saveRefreshTokenHash(user.id, tokens.refresh_token);
 
     return {
       user: {
@@ -24,8 +28,36 @@ export class AuthService {
         cnpj: user.cnpj,
         email: user.email,
       },
-      token: this.jwtService.sign(payload),
+      ...tokens,
     };
+  }
+
+  async refresh(userId: string, email: string, incomingRefreshToken: string) {
+    const user = await this.userService.findByIdWithRefreshHash(userId);
+
+    if (!user?.refreshTokenHash) {
+      throw new UnauthorizedException('Refresh token inválido');
+    }
+
+    const incomingHash = createHash('sha256')
+      .update(incomingRefreshToken)
+      .digest('hex');
+
+    if (incomingHash !== user.refreshTokenHash) {
+      await this.userService.clearRefreshTokenHash(userId);
+      throw new UnauthorizedException('Refresh token invalido ou ja utilizado');
+    }
+
+    const tokens = await this.generateTokens(userId, email);
+
+    await this.userService.saveRefreshTokenHash(userId, tokens.refresh_token);
+
+    return tokens;
+  }
+
+  async logout(userId: string) {
+    await this.userService.clearRefreshTokenHash(userId);
+    return { message: 'Logout realizado com sucesso' };
   }
 
   async validateUser(email: string, password: string) {
@@ -38,5 +70,22 @@ export class AuthService {
     if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
 
     return user;
+  }
+
+  private async generateTokens(userId: string, email: string) {
+    const payload: JwtPayload = { sub: userId, email };
+
+    const [access_token, refresh_token] = await Promise.all([
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
+        expiresIn: this.configService.getOrThrow('JWT_ACCESS_EXPIRES_IN'),
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
+        expiresIn: this.configService.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
+      }),
+    ]);
+
+    return { access_token, refresh_token };
   }
 }
