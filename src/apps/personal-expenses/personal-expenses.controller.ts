@@ -8,7 +8,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { PersonalExpensesService } from './personal-expenses.service';
-import { AuthGuard } from '@nestjs/passport';
 import { CreatePersonalExpenseDto } from './dto/create-personal-expense.dto';
 import { UpdatePersonalExpenseDto } from './dto/update-personal-expense.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';

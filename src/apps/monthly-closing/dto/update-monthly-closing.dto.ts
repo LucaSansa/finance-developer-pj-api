@@ -1,7 +1,5 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateMonthlyClosingDto } from './create-monthly-closing.dto';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsPositive } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional } from 'class-validator';
 import { IsOnlyDate } from 'src/common/decorators/is-only-date.decorator';
 import { Type } from 'class-transformer';
 import { CreateOperacionalPjDto } from 'src/apps/operacional-pj/dto/create-operacional-pj.dto';
@@ -15,18 +13,6 @@ export class UpdateMonthlyClosingDto {
   @IsOnlyDate()
   @IsOptional()
   closingDate: string;
-
-  @ApiPropertyOptional({
-    description: 'Valor total arrecadado no mês',
-    example: 15000.5,
-  })
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsOptional()
-  @IsPositive()
-  amountCollected: number;
 
   @ApiPropertyOptional({
     description: 'Indica se o fechamento foi concluído',

@@ -19,6 +19,7 @@ export class MonthlyClosingRepository extends BaseRepository<MonthlyClosing> {
 
     const query = this.createQueryBuilder('monthlyClosing')
       .leftJoin('monthlyClosing.operacionalPj', 'operacionalPj')
+      .leftJoin('operacionalPj.invoice', 'invoice')
       .leftJoin('monthlyClosing.personalExpense', 'personalExpense')
       .leftJoin('personalExpense.expenseType', 'expenseType')
       .where('monthlyClosing.userId = :userId', { userId });
@@ -44,6 +45,8 @@ export class MonthlyClosingRepository extends BaseRepository<MonthlyClosing> {
       'operacionalPj.accountFee',
       'operacionalPj.individualContribution',
       'operacionalPj.totalInvoiceTax',
+      'invoice.id',
+      'invoice.value',
       'personalExpense.id',
       'personalExpense.name',
       'personalExpense.description',
@@ -59,12 +62,16 @@ export class MonthlyClosingRepository extends BaseRepository<MonthlyClosing> {
 
   async findOneById(id: string) {
     const query = this.createQueryBuilder('monthlyClosing')
+      .leftJoin('monthlyClosing.user', 'user')
       .leftJoin('monthlyClosing.operacionalPj', 'operacionalPj')
+      .leftJoin('operacionalPj.invoice', 'invoice')
       .leftJoin('monthlyClosing.personalExpense', 'personalExpense')
       .leftJoin('personalExpense.expenseType', 'expenseType')
       .where('monthlyClosing.id = :id', { id });
 
     query.select([
+      'user.name',
+      'user.id',
       'monthlyClosing.id',
       'monthlyClosing.closingDate',
       'monthlyClosing.amountCollected',
@@ -73,6 +80,8 @@ export class MonthlyClosingRepository extends BaseRepository<MonthlyClosing> {
       'operacionalPj.accountFee',
       'operacionalPj.individualContribution',
       'operacionalPj.totalInvoiceTax',
+      'invoice.id',
+      'invoice.value',
       'personalExpense.id',
       'personalExpense.name',
       'personalExpense.description',

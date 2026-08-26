@@ -28,10 +28,14 @@ export class OperacionalPjService {
     if (!monthlyClosing)
       throw new UnauthorizedException('Mês de fechamento não encontrado.');
 
+    const totalInvoice = createMonthlyClosingDto.invoice?.reduce(
+      (acc, item) => acc + item.value,
+      0,
+    );
+
     const operacionalPj = this.operacionalPjRepo.create({
-      accountFee: createMonthlyClosingDto.accountFee,
-      individualContribution: createMonthlyClosingDto.individualContribution,
-      totalInvoiceTax: createMonthlyClosingDto.totalInvoiceTax,
+      ...createMonthlyClosingDto,
+      totalInvoiceTax: totalInvoice! * (6 / 100),
       monthlyClosing: monthlyClosing,
     });
 

@@ -1,6 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsPositive, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+} from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CreateInvoiceDto } from 'src/apps/invoice/dto/create-invoice.dto';
 
 export class CreateOperacionalPjDto {
   @ApiProperty({
@@ -27,22 +34,14 @@ export class CreateOperacionalPjDto {
   @IsPositive()
   individualContribution: number;
 
-  @ApiProperty({
-    description: 'Total de impostos sobre a nota',
-    example: 1500.75,
+  @ApiPropertyOptional({
+    description: 'Nota fiscal',
+    type: [CreateInvoiceDto],
   })
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsNotEmpty()
-  @IsPositive()
-  totalInvoiceTax: number;
+  @IsOptional()
+  @Type(() => CreateInvoiceDto)
+  invoice?: CreateInvoiceDto[];
 
-  // @ApiProperty({
-  //   description: 'ID do fechamento mensal associado',
-  //   example: 'uuid-fechamento-123',
-  // })
   @IsString()
   @IsNotEmpty()
   monthlyClosingId: string;

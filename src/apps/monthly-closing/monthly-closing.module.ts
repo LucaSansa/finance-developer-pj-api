@@ -8,6 +8,7 @@ import { UserModule } from '../user/user.module';
 import { OperacionalPjModule } from '../operacional-pj/operacional-pj.module';
 import { PersonalExpense } from '../personal-expenses/entities/personal-expense.entity';
 import { MonthlyClosingRepository } from './repositories/monthly-closing.repository';
+// import { Invoice } from '../invoice/entities/invoice.entity';
 
 @Module({
   imports: [

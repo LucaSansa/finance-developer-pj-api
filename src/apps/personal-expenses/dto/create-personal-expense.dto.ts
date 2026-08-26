@@ -37,10 +37,6 @@ export class CreatePersonalExpenseDto {
   @IsPositive()
   value: number;
 
-  // @ApiProperty({
-  //   description: 'ID do fechamento mensal associado',
-  //   example: 'uuid-fechamento-123',
-  // })
   @IsString()
   @IsNotEmpty()
   monthlyClosingId: string;

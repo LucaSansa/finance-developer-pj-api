@@ -7,7 +7,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { OperacionalPjService } from './operacional-pj.service';
-import { AuthGuard } from '@nestjs/passport';
 import { CreateOperacionalPjDto } from './dto/create-operacional-pj.dto';
 import { UpdateOperacionalPjDto } from './dto/update-operacional-pj.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
