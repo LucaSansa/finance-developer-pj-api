@@ -13,6 +13,9 @@ import { OperacionalPjRepository } from '../operacional-pj/repositories/operacio
 import { MonthlyClosingRepository } from './repositories/monthly-closing.repository';
 import { FilterMonthlyClosingDateDto } from './dto/filter-monthly-closing-date.dto';
 import { UpdateMonthlyClosingDto } from './dto/update-monthly-closing.dto';
+import { OperacionalPj } from '../operacional-pj/entities/operacional-pj.entity';
+import { Invoice } from '../invoice/entities/invoice.entity';
+import { PersonalExpense } from '../personal-expenses/entities/personal-expense.entity';
 
 @Injectable()
 export class MonthlyClosingService {
@@ -25,70 +28,105 @@ export class MonthlyClosingService {
     private readonly MonthlyClosingRepository: MonthlyClosingRepository,
   ) {}
 
-  async create(
-    userid: string,
-    createMonthlyClosingDto: CreateMonthlyClosingDto,
-  ) {
+  async create(userId: string, dto: CreateMonthlyClosingDto) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      const user = await this.userService.findById(userid);
-      if (!user) throw new UnauthorizedException('Usuario não encontrado.');
+      const user = await this.userService.findById(userId);
 
-      const monthlyExists = await this.monthlyClosingRepo.findOne({
-        where: { closingDate: createMonthlyClosingDto.closingDate },
+      if (!user) {
+        throw new UnauthorizedException('Usuário não encontrado.');
+      }
+
+      const monthlyExists = await queryRunner.manager.findOne(MonthlyClosing, {
+        where: {
+          userId,
+          closingDate: dto.closingDate,
+        },
       });
 
-      if (monthlyExists)
+      if (monthlyExists) {
         throw new ConflictException(
           'Fechamento mensal para essa data já existe.',
         );
+      }
 
       const totalInvoices =
-        createMonthlyClosingDto.operacionalPj?.invoice?.reduce(
-          (acc, item) => acc + item.value,
+        dto.operacionalPj?.invoice?.reduce(
+          (acc, invoice) => acc + invoice.value,
           0,
         ) ?? 0;
 
-      const monthly = this.monthlyClosingRepo.create({
-        closingDate: createMonthlyClosingDto.closingDate,
-        isClosing: createMonthlyClosingDto.isClosing,
+      const monthly = queryRunner.manager.create(MonthlyClosing, {
+        closingDate: dto.closingDate,
         amountCollected: totalInvoices,
-        user,
+        isClosing: dto.isClosing ?? false,
+        userId,
       });
 
-      await queryRunner.manager.save(monthly);
+      await queryRunner.manager.save(MonthlyClosing, monthly);
 
-      if (createMonthlyClosingDto.operacionalPj) {
-        const opPj = this.operacionalPjRepo.create({
-          ...createMonthlyClosingDto.operacionalPj,
-          totalInvoiceTax: totalInvoices * (6 / 100),
+      const operacionalPj = dto.operacionalPj;
+
+      const shouldCreateOperacionalPj =
+        operacionalPj &&
+        (operacionalPj.accountFee !== undefined ||
+          operacionalPj.individualContribution !== undefined ||
+          !!operacionalPj.invoice?.length);
+
+      if (shouldCreateOperacionalPj) {
+        const operacionalPjEntity = queryRunner.manager.create(OperacionalPj, {
+          accountFee: operacionalPj.accountFee ?? 0,
+          individualContribution: operacionalPj.individualContribution ?? 0,
+          totalInvoiceTax: totalInvoices * 0.06,
           monthlyClosingId: monthly.id,
         });
 
-        await queryRunner.manager.save(opPj);
+        await queryRunner.manager.save(OperacionalPj, operacionalPjEntity);
+
+        if (operacionalPj.invoice?.length) {
+          const invoices = operacionalPj.invoice.map((invoice) =>
+            queryRunner.manager.create(Invoice, {
+              value: invoice.value,
+              operacionalPjId: operacionalPjEntity.id,
+            }),
+          );
+
+          await queryRunner.manager.save(Invoice, invoices);
+        }
       }
 
-      if (createMonthlyClosingDto.personalExpense?.length) {
-        const expenses = createMonthlyClosingDto.personalExpense.map(
-          (expense) =>
-            queryRunner.manager.create('PersonalExpense', {
-              ...expense,
-              monthlyClosingId: monthly.id,
-            }),
+      if (dto.personalExpense?.length) {
+        const expenses = dto.personalExpense.map((expense) =>
+          queryRunner.manager.create(PersonalExpense, {
+            name: expense.name,
+            description: expense.description,
+            value: expense.value,
+            expenseTypeId: expense.expenseTypeId,
+            monthlyClosingId: monthly.id,
+          }),
         );
 
-        await queryRunner.manager.save(expenses);
+        await queryRunner.manager.save(PersonalExpense, expenses);
       }
 
       await queryRunner.commitTransaction();
 
-      return await this.MonthlyClosingRepository.findOneById(monthly.id);
+      return await this.MonthlyClosingRepository.findOne({
+        where: {
+          id: monthly.id,
+        },
+        relations: {
+          operacionalPj: {
+            invoice: true,
+          },
+          personalExpense: true,
+        },
+      });
     } catch (error) {
       await queryRunner.rollbackTransaction();
-
       throw error;
     } finally {
       await queryRunner.release();
@@ -97,107 +135,209 @@ export class MonthlyClosingService {
 
   async update(id: string, userId: string, dto: UpdateMonthlyClosingDto) {
     const queryRunner = this.dataSource.createQueryRunner();
+
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
       const user = await this.userService.findById(userId);
-      if (!user) throw new UnauthorizedException('Usuário não encontrado.');
 
-      const monthly = await this.MonthlyClosingRepository.findOneById(id);
+      if (!user) {
+        throw new UnauthorizedException('Usuário não encontrado.');
+      }
 
-      if (!monthly)
-        throw new ConflictException('Fechamento mensal não encontrado.');
-
-      const monthlyExists = await this.monthlyClosingRepo.findOne({
+      const monthly = await queryRunner.manager.findOne(MonthlyClosing, {
         where: {
-          closingDate: dto.closingDate ?? monthly.closingDate,
-          id: Not(id),
+          id,
+          userId,
+        },
+        relations: {
+          operacionalPj: true,
         },
       });
 
-      if (monthlyExists)
-        throw new ConflictException(
-          'Fechamento mensal para essa data já existe.',
+      if (!monthly) {
+        throw new NotFoundException('Fechamento mensal não encontrado.');
+      }
+
+      /*
+       * =========================================================
+       * 1. CAMPOS SIMPLES DO MONTHLY CLOSING
+       * =========================================================
+       */
+
+      if (dto.closingDate !== undefined) {
+        const monthlyExists = await queryRunner.manager.findOne(
+          MonthlyClosing,
+          {
+            where: {
+              userId,
+              closingDate: dto.closingDate,
+              id: Not(id),
+            },
+          },
         );
 
-      const totalInvoices =
-        dto.operacionalPj?.invoice?.reduce(
-          (acc, item) => acc + item.value,
-          0,
-        ) ?? 0;
+        if (monthlyExists) {
+          throw new ConflictException(
+            'Fechamento mensal para essa data já existe.',
+          );
+        }
 
-      queryRunner.manager.merge(MonthlyClosing, monthly, {
-        closingDate: dto.closingDate ?? monthly.closingDate,
-        amountCollected: totalInvoices,
-        isClosing: dto.isClosing ?? monthly.isClosing,
-      });
+        monthly.closingDate = dto.closingDate;
+      }
 
-      await queryRunner.manager.save(monthly);
+      if (dto.isClosing !== undefined) {
+        monthly.isClosing = dto.isClosing;
+      }
 
-      if (dto.operacionalPj) {
-        if (monthly.operacionalPj) {
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { invoice, ...operacionalPjData } = dto.operacionalPj;
+      /*
+       * =========================================================
+       * 2. OPERACIONAL PJ
+       * =========================================================
+       */
 
-          queryRunner.manager.merge('OperacionalPj', monthly.operacionalPj, {
-            ...operacionalPjData,
-            totalInvoiceTax: totalInvoices * (6 / 100),
-          });
+      if (dto.operacionalPj !== undefined) {
+        let operacionalPj = monthly.operacionalPj;
 
-          await queryRunner.manager.save(monthly.operacionalPj);
-        } else {
-          const opPj = this.operacionalPjRepo.create({
-            ...dto.operacionalPj,
-            totalInvoiceTax: totalInvoices * (6 / 100),
+        /*
+         * Se o PJ ainda não existe, criamos.
+         */
+        if (!operacionalPj) {
+          operacionalPj = queryRunner.manager.create(OperacionalPj, {
+            accountFee: dto.operacionalPj.accountFee ?? 0,
+
+            individualContribution:
+              dto.operacionalPj.individualContribution ?? 0,
+
+            totalInvoiceTax: 0,
+
             monthlyClosingId: monthly.id,
           });
 
-          await queryRunner.manager.save(opPj);
+          operacionalPj = await queryRunner.manager.save(
+            OperacionalPj,
+            operacionalPj,
+          );
+
+          monthly.operacionalPj = operacionalPj;
+        } else {
+          /*
+           * Atualiza somente os campos enviados.
+           */
+
+          if (dto.operacionalPj.accountFee !== undefined) {
+            operacionalPj.accountFee = dto.operacionalPj.accountFee;
+          }
+
+          if (dto.operacionalPj.individualContribution !== undefined) {
+            operacionalPj.individualContribution =
+              dto.operacionalPj.individualContribution;
+          }
+
+          await queryRunner.manager.save(OperacionalPj, operacionalPj);
+        }
+
+        /*
+         * =======================================================
+         * 3. INVOICES
+         * =======================================================
+         *
+         * Só entra aqui se "invoice" realmente foi enviado.
+         *
+         * undefined -> não altera invoices
+         * []        -> remove todas
+         * [...]     -> substitui todas
+         */
+
+        if (dto.operacionalPj.invoice !== undefined) {
+          await queryRunner.manager.softDelete(Invoice, {
+            operacionalPjId: operacionalPj.id,
+          });
+
+          const invoices = dto.operacionalPj.invoice.map((invoice) =>
+            queryRunner.manager.create(Invoice, {
+              value: invoice.value,
+              operacionalPjId: operacionalPj.id,
+            }),
+          );
+
+          if (invoices.length > 0) {
+            await queryRunner.manager.save(Invoice, invoices);
+          }
+
+          /*
+           * Recalcula somente porque as invoices foram alteradas.
+           */
+
+          const totalInvoices = dto.operacionalPj.invoice.reduce(
+            (acc, invoice) => acc + invoice.value,
+            0,
+          );
+
+          monthly.amountCollected = totalInvoices;
+
+          operacionalPj.totalInvoiceTax = totalInvoices * 0.06;
+
+          await queryRunner.manager.save(OperacionalPj, operacionalPj);
         }
       }
 
-      if (dto.operacionalPj?.invoice?.length) {
-        await queryRunner.manager.softDelete('Invoice', {
-          operacionalPjId: monthly.operacionalPj?.id,
-        });
+      /*
+       * =========================================================
+       * 4. DESPESAS PESSOAIS
+       * =========================================================
+       *
+       * undefined -> não altera
+       * []        -> remove todas
+       * [...]     -> substitui todas
+       */
 
-        const invoices = dto.operacionalPj.invoice.map((invoice) =>
-          queryRunner.manager.create('Invoice', {
-            ...invoice,
-            operacionalPj: monthly.operacionalPj,
-            operacionalPjId: monthly.operacionalPj?.id,
-          }),
-        );
-        await queryRunner.manager.save(invoices);
-      } else if (monthly?.operacionalPj?.invoice?.length) {
-        await queryRunner.manager.softDelete('Invoice', {
-          operacionalPjId: monthly.operacionalPj?.id,
-        });
-      }
-
-      if (dto.personalExpense?.length) {
-        await queryRunner.manager.softDelete('PersonalExpense', {
+      if (dto.personalExpense !== undefined) {
+        await queryRunner.manager.softDelete(PersonalExpense, {
           monthlyClosingId: monthly.id,
         });
 
         const expenses = dto.personalExpense.map((expense) =>
-          queryRunner.manager.create('PersonalExpense', {
-            ...expense,
+          queryRunner.manager.create(PersonalExpense, {
+            name: expense.name,
+            description: expense.description,
+            value: expense.value,
+            expenseTypeId: expense.expenseTypeId,
             monthlyClosingId: monthly.id,
           }),
         );
 
-        await queryRunner.manager.save(expenses);
-      } else if (monthly.personalExpense?.length) {
-        await queryRunner.manager.softDelete('PersonalExpense', {
-          monthlyClosingId: monthly.id,
-        });
+        if (expenses.length > 0) {
+          await queryRunner.manager.save(PersonalExpense, expenses);
+        }
       }
+
+      /*
+       * =========================================================
+       * 5. SALVA O MONTHLY CLOSING
+       * =========================================================
+       */
+
+      await queryRunner.manager.save(MonthlyClosing, monthly);
 
       await queryRunner.commitTransaction();
 
-      return await this.MonthlyClosingRepository.findOneById(monthly.id);
+      /*
+       * Busca novamente para retornar o estado atualizado.
+       */
+
+      return await this.MonthlyClosingRepository.findOne({
+        where: {
+          id: monthly.id,
+        },
+        relations: {
+          operacionalPj: {
+            invoice: true,
+          },
+          personalExpense: true,
+        },
+      });
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
@@ -213,11 +353,11 @@ export class MonthlyClosingService {
   async findOneById(userId: string, id: string) {
     try {
       const user = await this.userService.findById(userId);
+
       if (!user) throw new UnauthorizedException('Usuário não encontrado.');
 
       const monthly = await this.monthlyClosingRepo.findOne({
         where: { id, userId },
-        relations: ['operacionalPj', 'personalExpense'],
       });
 
       if (!monthly)
@@ -241,11 +381,17 @@ export class MonthlyClosingService {
     await queryRunner.startTransaction();
 
     try {
-      const monthly = await this.MonthlyClosingRepository.findOneById(id);
+      // const monthly = await this.MonthlyClosingRepository.findOneById(id);
 
-      console.log('===> ', monthly?.user);
-
-      console.log(monthly);
+      const monthly = await this.monthlyClosingRepo.findOne({
+        where: {
+          id,
+          userId,
+        },
+        relations: {
+          user: true,
+        },
+      });
 
       if (!monthly) {
         throw new ConflictException('Fechamento mensal não encontrado.');

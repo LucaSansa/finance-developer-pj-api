@@ -6,10 +6,11 @@ import { OperacionalPj } from './entities/operacional-pj.entity';
 import { MonthlyClosingModule } from '../monthly-closing/monthly-closing.module';
 import { OperacionalPjRepository } from './repositories/operacional-pj.repository';
 import { MonthlyClosing } from '../monthly-closing/entities/monthly-closing.entity';
+import { Invoice } from '../invoice/entities/invoice.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OperacionalPj, MonthlyClosing]),
+    TypeOrmModule.forFeature([OperacionalPj, MonthlyClosing, Invoice]),
     forwardRef(() => MonthlyClosingModule),
   ],
   controllers: [OperacionalPjController],

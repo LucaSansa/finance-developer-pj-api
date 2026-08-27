@@ -21,9 +21,7 @@ export class OperacionalPj extends BaseEntity<OperacionalPj> {
   })
   totalInvoiceTax: number;
 
-  @OneToMany(() => Invoice, (item) => item.operacionalPj, {
-    cascade: true,
-  })
+  @OneToMany(() => Invoice, (item) => item.operacionalPj, {})
   invoice?: Invoice[];
 
   @Column()

@@ -19,14 +19,17 @@ export class OperacionalPjController {
   constructor(private readonly operacionalPjService: OperacionalPjService) {}
 
   @UseGuards(JwtAuthGuard)
-  @Post()
-  create(@Body() createOperacionalPj: CreateOperacionalPjDto) {
-    return this.operacionalPjService.create(createOperacionalPj);
+  @Post(':id')
+  create(
+    @Param('id') id: string,
+    @Body() createOperacionalPj: CreateOperacionalPjDto,
+  ) {
+    return this.operacionalPjService.create(id, createOperacionalPj);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateOperacionalPjDto) {
-    return this.operacionalPjService.update(id, dto);
+    // return this.operacionalPjService.update(id, dto);
   }
 }

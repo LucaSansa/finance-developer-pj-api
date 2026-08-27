@@ -38,8 +38,6 @@ export class MonthlyClosing extends BaseEntity<MonthlyClosing> {
   @OneToOne(() => OperacionalPj, (item) => item.monthlyClosing)
   operacionalPj?: OperacionalPj;
 
-  @OneToMany(() => PersonalExpense, (item) => item.monthlyClosing, {
-    cascade: true,
-  })
+  @OneToMany(() => PersonalExpense, (item) => item.monthlyClosing, {})
   personalExpense?: PersonalExpense[];
 }

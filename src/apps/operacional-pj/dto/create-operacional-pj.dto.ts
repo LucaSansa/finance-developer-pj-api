@@ -1,48 +1,35 @@
 import { Type } from 'class-transformer';
-import {
-  IsNotEmpty,
-  IsNumber,
-  IsOptional,
-  IsPositive,
-  IsString,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsOptional, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateInvoiceDto } from 'src/apps/invoice/dto/create-invoice.dto';
-
 export class CreateOperacionalPjDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Tarifa da conta PJ',
     example: 50.0,
+    default: 0,
   })
   @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsNotEmpty()
-  @IsPositive()
-  accountFee: number;
-
-  @ApiProperty({
-    description: 'Contribuição individual (pró-labore, etc.)',
-    example: 2000.0,
-  })
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsNotEmpty()
-  @IsPositive()
-  individualContribution: number;
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  accountFee?: number;
 
   @ApiPropertyOptional({
-    description: 'Nota fiscal',
+    description: 'Contribuição individual',
+    example: 2000.0,
+    default: 0,
+  })
+  @Type(() => Number)
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  individualContribution?: number;
+
+  @ApiPropertyOptional({
+    description: 'Notas fiscais',
     type: [CreateInvoiceDto],
   })
   @IsOptional()
   @Type(() => CreateInvoiceDto)
   invoice?: CreateInvoiceDto[];
-
-  @IsString()
-  @IsNotEmpty()
-  monthlyClosingId: string;
 }
