@@ -2,6 +2,7 @@ import {
   forwardRef,
   Inject,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -22,10 +23,11 @@ export class PersonalExpensesService {
     private readonly expenseTypeRepository: ExpenseTypeRepository,
   ) {}
 
-  async create(personalExpenseDto: CreatePersonalExpenseDto) {
-    const monthlyClosing = await this.monthlyClosingService.findById(
-      personalExpenseDto.monthlyClosingId,
-    );
+  async create(
+    monthlyId: string,
+    personalExpenseDto: CreatePersonalExpenseDto,
+  ) {
+    const monthlyClosing = await this.monthlyClosingService.findById(monthlyId);
 
     if (!monthlyClosing)
       throw new UnauthorizedException('Mês de fechamento não encontrado.');
@@ -41,27 +43,47 @@ export class PersonalExpensesService {
     return await this.personalExpenseRepo.save(personalExpense);
   }
 
+  async update(id: string, dto: UpdatePersonalExpenseDto) {
+    const personalExpense = await this.findById(id);
+
+    if (!personalExpense) {
+      throw new NotFoundException('Despesa pessoal não encontrada.');
+    }
+
+    if (dto.expenseTypeId !== undefined) {
+      const expenseType = await this.expenseTypeRepository.findOne({
+        where: { id: dto.expenseTypeId },
+      });
+
+      if (!expenseType) {
+        throw new NotFoundException('Tipo de despesa não encontrado.');
+      }
+
+      personalExpense.expenseTypeId = dto.expenseTypeId;
+      personalExpense.expenseType = expenseType;
+    }
+
+    if (dto.name !== undefined) {
+      personalExpense.name = dto.name;
+    }
+
+    if (dto.description !== undefined) {
+      personalExpense.description = dto.description;
+    }
+
+    if (dto.value !== undefined) {
+      personalExpense.value = dto.value;
+    }
+
+    return await this.personalExpenseRepo.save(personalExpense);
+  }
+
   async findById(id: string) {
     return await this.personalExpenseRepo.findOne({ where: { id } });
   }
 
-  async deleteById(id: string) {
+  async delete(id: string) {
     return await this.personalExpenseRepo.softDelete({ id });
-  }
-
-  async update(id: string, dto: UpdatePersonalExpenseDto) {
-    const personalExpense = await this.findById(id);
-
-    if (!personalExpense)
-      throw new UnauthorizedException('Operacional PJ não encontrado.');
-
-    return await this.personalExpenseRepo.save({
-      ...personalExpense,
-      name: dto.name,
-      description: dto.description,
-      value: dto.value,
-      expenseTypeId: dto.expenseTypeId,
-    });
   }
 
   async findAllExpenseTypes() {

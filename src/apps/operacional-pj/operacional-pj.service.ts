@@ -1,14 +1,11 @@
 import {
   ConflictException,
-  forwardRef,
-  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { OperacionalPj } from './entities/operacional-pj.entity';
 import { Repository, DataSource } from 'typeorm';
-import { MonthlyClosingService } from '../monthly-closing/monthly-closing.service';
 import { CreateOperacionalPjDto } from './dto/create-operacional-pj.dto';
 import { Invoice } from '../invoice/entities/invoice.entity';
 import { MonthlyClosing } from '../monthly-closing/entities/monthly-closing.entity';
@@ -21,9 +18,6 @@ export class OperacionalPjService {
     @InjectRepository(OperacionalPj)
     private operacionalPjRepo: Repository<OperacionalPj>,
     @InjectRepository(Invoice)
-    private invoiceRepo: Repository<Invoice>,
-    @Inject(forwardRef(() => MonthlyClosingService))
-    private monthlyClosingService: MonthlyClosingService,
     private readonly dataSource: DataSource,
   ) {}
 

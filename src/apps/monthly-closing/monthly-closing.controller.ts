@@ -14,7 +14,12 @@ import { CreateMonthlyClosingDto } from './dto/create-monthly-closing.dto';
 import { CurrentUser } from '../auth/decorators/user.decorator';
 import { FilterMonthlyClosingDateDto } from './dto/filter-monthly-closing-date.dto';
 import { UpdateMonthlyClosingDto } from './dto/update-monthly-closing.dto';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('monthly-closing')
@@ -25,6 +30,9 @@ export class MonthlyClosingController {
 
   @UseGuards(JwtAuthGuard)
   @Post()
+  @ApiOperation({
+    summary: 'Cria fechamento mensal',
+  })
   create(
     @CurrentUser() user: { id: string },
     @Body() createMonthlyClosingDto: CreateMonthlyClosingDto,
@@ -34,6 +42,9 @@ export class MonthlyClosingController {
 
   @UseGuards(JwtAuthGuard)
   @Get('find-all')
+  @ApiOperation({
+    summary: 'Lista todos os fechementos mensais do usuário de forma paginada',
+  })
   findAll(
     @CurrentUser() user: { id: string },
     @Query() dto: FilterMonthlyClosingDateDto,
@@ -42,13 +53,23 @@ export class MonthlyClosingController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('find-one')
-  findById(@CurrentUser() user: { id: string }, @Query('id') id: string) {
+  @Get('find-one/:id')
+  @ApiOperation({ summary: 'Buca por um mês de fechamento por ID' })
+  @ApiParam({
+    name: 'id',
+    description: 'ID do fechamento mensal',
+  })
+  findById(@CurrentUser() user: { id: string }, @Param('id') id: string) {
     return this.monthlyClosingService.findOneById(user.id, id);
   }
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
+  @ApiOperation({ summary: 'Atualiza mês de fechamento por ID' })
+  @ApiParam({
+    name: 'id',
+    description: 'ID do fechamento mensal',
+  })
   update(
     @Param('id') id: string,
     @CurrentUser() user: { id: string },
@@ -59,6 +80,13 @@ export class MonthlyClosingController {
 
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
+  @ApiOperation({
+    summary: 'Deleta fechamento mensal',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID do fechamento mensal',
+  })
   delete(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.monthlyClosingService.delete(id, user.id);
   }

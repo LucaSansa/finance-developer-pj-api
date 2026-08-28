@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Not, Repository } from 'typeorm';
 import { MonthlyClosing } from './entities/monthly-closing.entity';
 import { UserService } from '../user/user.service';
-import { OperacionalPjRepository } from '../operacional-pj/repositories/operacional-pj.repository';
 import { MonthlyClosingRepository } from './repositories/monthly-closing.repository';
 import { FilterMonthlyClosingDateDto } from './dto/filter-monthly-closing-date.dto';
 import { UpdateMonthlyClosingDto } from './dto/update-monthly-closing.dto';
@@ -23,7 +22,6 @@ export class MonthlyClosingService {
     @InjectRepository(MonthlyClosing)
     private monthlyClosingRepo: Repository<MonthlyClosing>,
     private userService: UserService,
-    private operacionalPjRepo: OperacionalPjRepository,
     private readonly dataSource: DataSource,
     private readonly MonthlyClosingRepository: MonthlyClosingRepository,
   ) {}
