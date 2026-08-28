@@ -13,7 +13,7 @@ import { CreateOperacionalPjDto } from './dto/create-operacional-pj.dto';
 import { Invoice } from '../invoice/entities/invoice.entity';
 import { MonthlyClosing } from '../monthly-closing/entities/monthly-closing.entity';
 
-// import { UpdateOperacionalPjDto } from './dto/update-operacional-pj.dto';
+import { UpdateOperacionalPjDto } from './dto/update-operacional-pj.dto';
 
 @Injectable()
 export class OperacionalPjService {
@@ -63,7 +63,6 @@ export class OperacionalPjService {
         individualContribution:
           createMonthlyClosingDto.individualContribution ?? 0,
         totalInvoiceTax: totalInvoice * 0.06,
-        // monthlyClosing: monthlyClosing,
         monthlyClosingId: id,
       });
 
@@ -103,24 +102,158 @@ export class OperacionalPjService {
   }
 
   async findById(id: string) {
-    return await this.operacionalPjRepo.findOne({ where: { id } });
+    return await this.operacionalPjRepo.findOne({
+      where: { id },
+      relations: {
+        invoice: true,
+      },
+    });
   }
 
   async deleteById(id: string) {
     return await this.operacionalPjRepo.softDelete({ id });
   }
 
-  // async update(id: string, dto: UpdateOperacionalPjDto) {
-  //   const operacionalPj = await this.findById(id);
+  async update(id: string, dto: UpdateOperacionalPjDto) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-  //   if (!operacionalPj)
-  //     throw new UnauthorizedException('Operacional PJ não encontrado.');
+    try {
+      const operacionalPj = await queryRunner.manager.findOne(OperacionalPj, {
+        where: {
+          id,
+        },
+      });
 
-  //   return await this.operacionalPjRepo.save({
-  //     ...operacionalPj,
-  //     accountFee: dto.accountFee,
-  //     individualContribution: dto.individualContribution,
-  //     totalInvoiceTax: dto.totalInvoiceTax,
-  //   });
-  // }
+      if (!operacionalPj)
+        throw new UnauthorizedException('Operacional PJ não encontrado.');
+
+      const monthly = await queryRunner.manager.findOne(MonthlyClosing, {
+        where: {
+          id: operacionalPj.monthlyClosingId,
+        },
+      });
+
+      if (!monthly)
+        throw new UnauthorizedException('Fechamento mensal não encontrado.');
+
+      // Atualiza campos do Operacional PJ
+      if (dto.accountFee !== undefined) {
+        operacionalPj.accountFee = dto.accountFee;
+      }
+
+      if (dto.individualContribution !== undefined) {
+        operacionalPj.individualContribution = dto.individualContribution;
+      }
+
+      // Atualiza invoices somente se invoice foi enviada
+      if (dto.invoice !== undefined) {
+        await queryRunner.manager.softDelete(Invoice, {
+          operacionalPjId: operacionalPj.id,
+        });
+
+        const totalInvoices = dto.invoice.reduce(
+          (acc, invoice) => acc + invoice.value,
+          0,
+        );
+
+        const invoices = dto.invoice.map((invoice) =>
+          queryRunner.manager.create(Invoice, {
+            value: invoice.value,
+            operacionalPjId: operacionalPj.id,
+          }),
+        );
+
+        if (invoices.length > 0) {
+          await queryRunner.manager.save(Invoice, invoices);
+        }
+
+        operacionalPj.totalInvoiceTax = totalInvoices * 0.06;
+
+        monthly.amountCollected = totalInvoices;
+
+        await queryRunner.manager.update(MonthlyClosing, monthly.id, {
+          amountCollected: totalInvoices,
+        });
+      }
+
+      // Salva o Operacional PJ uma única vez
+      await queryRunner.manager.save(OperacionalPj, operacionalPj);
+
+      await queryRunner.commitTransaction();
+
+      return await this.operacionalPjRepo.findOne({
+        where: {
+          id: operacionalPj.id,
+        },
+        relations: {
+          invoice: true,
+        },
+      });
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async delete(id: string, userId: string) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const operacionalPj = await this.findById(id);
+
+      if (!operacionalPj) {
+        throw new UnauthorizedException('Operacional PJ não encontrado.');
+      }
+
+      const monthlyClosing = await queryRunner.manager.findOne(MonthlyClosing, {
+        where: {
+          id: operacionalPj.monthlyClosingId,
+        },
+        relations: {
+          // operacionalPj: true,
+          user: true,
+        },
+      });
+
+      if (monthlyClosing?.user.id !== userId) {
+        throw new UnauthorizedException('Mês de fechamento não encontrado');
+      }
+
+      if (operacionalPj.invoice?.length) {
+        await queryRunner.manager.softDelete(Invoice, {
+          operacionalPjId: operacionalPj.id,
+        });
+      }
+
+      await queryRunner.manager.softDelete(OperacionalPj, {
+        id: id,
+      });
+
+      await queryRunner.manager.update(MonthlyClosing, monthlyClosing.id, {
+        amountCollected: 0,
+      });
+
+      await queryRunner.commitTransaction();
+
+      return await this.operacionalPjRepo.findOne({
+        where: {
+          id: id,
+        },
+        relations: {
+          invoice: true,
+        },
+      });
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
 }

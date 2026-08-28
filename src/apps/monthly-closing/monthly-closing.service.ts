@@ -376,7 +376,6 @@ export class MonthlyClosingService {
 
   async delete(id: string, userId: string) {
     const queryRunner = this.dataSource.createQueryRunner();
-
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
