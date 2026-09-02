@@ -18,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '../auth/decorators/user.decorator';
 
 @Controller('personal-expenses')
 @ApiBearerAuth()
@@ -36,10 +37,12 @@ export class PersonalExpensesController {
   })
   create(
     @Param('id') monthlyId: string,
+    @CurrentUser() user: { id: string },
     @Body() createPersonalExpenses: CreatePersonalExpenseDto,
   ) {
     return this.personalExpensesService.create(
       monthlyId,
+      user.id,
       createPersonalExpenses,
     );
   }
@@ -51,8 +54,12 @@ export class PersonalExpensesController {
     name: 'id',
     description: 'ID da despesa pessoal',
   })
-  update(@Param('id') id: string, @Body() dto: UpdatePersonalExpenseDto) {
-    return this.personalExpensesService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() dto: UpdatePersonalExpenseDto,
+  ) {
+    return this.personalExpensesService.update(id, user.id, dto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -62,8 +69,8 @@ export class PersonalExpensesController {
     name: 'id',
     description: 'ID da despesa pessoal',
   })
-  delete(@Param('id') id: string) {
-    return this.personalExpensesService.delete(id);
+  delete(@Param('id') id: string, @CurrentUser() user: { id: string }) {
+    return this.personalExpensesService.delete(id, user.id);
   }
 
   @UseGuards(JwtAuthGuard)

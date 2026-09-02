@@ -369,7 +369,10 @@ export class MonthlyClosingService {
   }
 
   async findById(id: string) {
-    return await this.monthlyClosingRepo.findOne({ where: { id } });
+    return await this.monthlyClosingRepo.findOne({
+      where: { id },
+      relations: { user: true },
+    });
   }
 
   async delete(id: string, userId: string) {

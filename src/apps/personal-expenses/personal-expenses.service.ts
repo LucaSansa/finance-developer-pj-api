@@ -25,12 +25,13 @@ export class PersonalExpensesService {
 
   async create(
     monthlyId: string,
+    userId: string,
     personalExpenseDto: CreatePersonalExpenseDto,
   ) {
     const monthlyClosing = await this.monthlyClosingService.findById(monthlyId);
 
-    if (!monthlyClosing)
-      throw new UnauthorizedException('Mês de fechamento não encontrado.');
+    if (!monthlyClosing || monthlyClosing.user.id !== userId)
+      throw new UnauthorizedException('Operação inválida.');
 
     const personalExpense = this.personalExpenseRepo.create({
       name: personalExpenseDto.name,
@@ -43,12 +44,19 @@ export class PersonalExpensesService {
     return await this.personalExpenseRepo.save(personalExpense);
   }
 
-  async update(id: string, dto: UpdatePersonalExpenseDto) {
+  async update(id: string, userId: string, dto: UpdatePersonalExpenseDto) {
     const personalExpense = await this.findById(id);
 
     if (!personalExpense) {
       throw new NotFoundException('Despesa pessoal não encontrada.');
     }
+
+    const monthlyClosing = await this.monthlyClosingService.findById(
+      personalExpense.monthlyClosingId,
+    );
+
+    if (!monthlyClosing || monthlyClosing.user.id !== userId)
+      throw new UnauthorizedException('Operação inválida.');
 
     if (dto.expenseTypeId !== undefined) {
       const expenseType = await this.expenseTypeRepository.findOne({
@@ -82,7 +90,20 @@ export class PersonalExpensesService {
     return await this.personalExpenseRepo.findOne({ where: { id } });
   }
 
-  async delete(id: string) {
+  async delete(id: string, userId: string) {
+    const personalExpense = await this.findById(id);
+
+    if (!personalExpense) {
+      throw new NotFoundException('Despesa pessoal não encontrada.');
+    }
+
+    const monthlyClosing = await this.monthlyClosingService.findById(
+      personalExpense.monthlyClosingId,
+    );
+
+    if (!monthlyClosing || monthlyClosing.user.id !== userId)
+      throw new UnauthorizedException('Operação inválida.');
+
     return await this.personalExpenseRepo.softDelete({ id });
   }
 
