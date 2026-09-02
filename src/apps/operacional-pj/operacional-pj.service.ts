@@ -3,7 +3,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
+import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { OperacionalPj } from './entities/operacional-pj.entity';
 import { Repository, DataSource } from 'typeorm';
 import { CreateOperacionalPjDto } from './dto/create-operacional-pj.dto';
@@ -17,11 +17,15 @@ export class OperacionalPjService {
   constructor(
     @InjectRepository(OperacionalPj)
     private operacionalPjRepo: Repository<OperacionalPj>,
-    @InjectRepository(Invoice)
+    @InjectDataSource()
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(id: string, createMonthlyClosingDto: CreateOperacionalPjDto) {
+  async create(
+    id: string,
+    userId: string,
+    createMonthlyClosingDto: CreateOperacionalPjDto,
+  ) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -30,6 +34,7 @@ export class OperacionalPjService {
       const monthlyClosing = await queryRunner.manager.findOne(MonthlyClosing, {
         where: {
           id,
+          userId,
         },
         relations: {
           operacionalPj: true,
@@ -108,7 +113,7 @@ export class OperacionalPjService {
     return await this.operacionalPjRepo.softDelete({ id });
   }
 
-  async update(id: string, dto: UpdateOperacionalPjDto) {
+  async update(id: string, userId: string, dto: UpdateOperacionalPjDto) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -126,8 +131,14 @@ export class OperacionalPjService {
       const monthly = await queryRunner.manager.findOne(MonthlyClosing, {
         where: {
           id: operacionalPj.monthlyClosingId,
+          userId: userId,
+        },
+        relations: {
+          user: true,
         },
       });
+
+      console.log('===> ', monthly);
 
       if (!monthly)
         throw new UnauthorizedException('Fechamento mensal não encontrado.');

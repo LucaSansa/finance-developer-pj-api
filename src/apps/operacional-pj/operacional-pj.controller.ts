@@ -36,9 +36,10 @@ export class OperacionalPjController {
   })
   create(
     @Param('id') id: string,
+    @CurrentUser() user: { id: string },
     @Body() createOperacionalPj: CreateOperacionalPjDto,
   ) {
-    return this.operacionalPjService.create(id, createOperacionalPj);
+    return this.operacionalPjService.create(id, user.id, createOperacionalPj);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -48,8 +49,12 @@ export class OperacionalPjController {
     name: 'id',
     description: 'ID do operacional PJ',
   })
-  update(@Param('id') id: string, @Body() dto: UpdateOperacionalPjDto) {
-    return this.operacionalPjService.update(id, dto);
+  update(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() dto: UpdateOperacionalPjDto,
+  ) {
+    return this.operacionalPjService.update(id, user.id, dto);
   }
 
   @UseGuards(JwtAuthGuard)
