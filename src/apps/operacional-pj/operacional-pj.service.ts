@@ -138,8 +138,6 @@ export class OperacionalPjService {
         },
       });
 
-      console.log('===> ', monthly);
-
       if (!monthly)
         throw new UnauthorizedException('Fechamento mensal não encontrado.');
 
