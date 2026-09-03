@@ -1,11 +1,9 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateMonthlyClosingDto } from './create-monthly-closing.dto';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsPositive } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional } from 'class-validator';
 import { IsOnlyDate } from 'src/common/decorators/is-only-date.decorator';
 import { Type } from 'class-transformer';
-import { CreateOperacionalPjDto } from 'src/apps/operacional-pj/dto/create-operacional-pj.dto';
-import { CreatePersonalExpenseDto } from 'src/apps/personal-expenses/dto/create-personal-expense.dto';
+import { UpdateOperacionalPjDto } from 'src/apps/operacional-pj/dto/update-operacional-pj.dto';
+import { UpdatePersonalExpenseDto } from 'src/apps/personal-expenses/dto/update-personal-expense.dto';
 
 export class UpdateMonthlyClosingDto {
   @ApiPropertyOptional({
@@ -14,19 +12,7 @@ export class UpdateMonthlyClosingDto {
   })
   @IsOnlyDate()
   @IsOptional()
-  closingDate: string;
-
-  @ApiPropertyOptional({
-    description: 'Valor total arrecadado no mês',
-    example: 15000.5,
-  })
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsOptional()
-  @IsPositive()
-  amountCollected: number;
+  closingDate?: string;
 
   @ApiPropertyOptional({
     description: 'Indica se o fechamento foi concluído',
@@ -36,18 +22,16 @@ export class UpdateMonthlyClosingDto {
   isClosing?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Informações operacionais do PJ relacionadas ao fechamento',
-    type: CreateOperacionalPjDto,
+    type: UpdateOperacionalPjDto,
   })
   @IsOptional()
-  @Type(() => CreateOperacionalPjDto)
-  operacionalPj?: CreateOperacionalPjDto;
+  @Type(() => UpdateOperacionalPjDto)
+  operacionalPj?: UpdateOperacionalPjDto;
 
   @ApiPropertyOptional({
-    description: 'Despesas pessoais relacionadas ao fechamento',
-    type: [CreatePersonalExpenseDto],
+    type: [UpdatePersonalExpenseDto],
   })
   @IsOptional()
-  @Type(() => CreatePersonalExpenseDto)
-  personalExpense?: CreatePersonalExpenseDto[];
+  @Type(() => UpdatePersonalExpenseDto)
+  personalExpense?: UpdatePersonalExpenseDto[];
 }

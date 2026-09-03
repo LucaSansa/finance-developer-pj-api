@@ -1,49 +1,35 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsPositive, IsString } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
+import { IsNumber, IsOptional, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { CreateInvoiceDto } from 'src/apps/invoice/dto/create-invoice.dto';
 export class CreateOperacionalPjDto {
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Tarifa da conta PJ',
     example: 50.0,
+    default: 0,
   })
   @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsNotEmpty()
-  @IsPositive()
-  accountFee: number;
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  accountFee?: number;
 
-  @ApiProperty({
-    description: 'Contribuição individual (pró-labore, etc.)',
+  @ApiPropertyOptional({
+    description: 'Contribuição individual',
     example: 2000.0,
+    default: 0,
   })
   @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsNotEmpty()
-  @IsPositive()
-  individualContribution: number;
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  individualContribution?: number;
 
-  @ApiProperty({
-    description: 'Total de impostos sobre a nota',
-    example: 1500.75,
+  @ApiPropertyOptional({
+    description: 'Notas fiscais',
+    type: [CreateInvoiceDto],
   })
-  @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsNotEmpty()
-  @IsPositive()
-  totalInvoiceTax: number;
-
-  // @ApiProperty({
-  //   description: 'ID do fechamento mensal associado',
-  //   example: 'uuid-fechamento-123',
-  // })
-  @IsString()
-  @IsNotEmpty()
-  monthlyClosingId: string;
+  @IsOptional()
+  @Type(() => CreateInvoiceDto)
+  invoice?: CreateInvoiceDto[];
 }

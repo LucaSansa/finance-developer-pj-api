@@ -12,13 +12,13 @@ export class CreateUserDto {
   @IsString()
   cnpj: string;
 
-  @ApiProperty({ example: 'contato@empresa.com' })
+  @ApiProperty({ example: 'teste@teste.com' })
   @IsNotEmpty()
   @IsEmail()
   @IsString()
   email: string;
 
-  @ApiProperty({ example: 'strongPassword123' })
+  @ApiProperty({ example: 'teste123' })
   @IsNotEmpty()
   @IsString()
   password: string;
