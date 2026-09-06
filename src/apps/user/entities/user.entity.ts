@@ -16,6 +16,33 @@ export class User extends BaseEntity<User> {
   @Column({ select: false })
   password: string;
 
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  emailVerifiedAt: Date | null;
+
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    select: false,
+    name: 'email_verification_token_hash',
+  })
+  emailVerificationTokenHash: string | null;
+
+  @Column({
+    type: 'timestamp with time zone',
+    nullable: true,
+    select: false,
+    name: 'email_verification_expires_at',
+  })
+  emailVerificationExpiresAt: Date | null;
+
+  @Column({
+    type: 'timestamp with time zone',
+    select: false,
+    nullable: true,
+    name: 'email_verification_sent_at',
+  })
+  emailVerificationSentAt: Date | null;
+
   @Column({
     type: 'varchar',
     select: false,

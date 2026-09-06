@@ -1,16 +1,27 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
+import { EmailService } from '../email/email.service';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class UserService {
+  private readonly logger = new Logger(UserService.name);
+
   constructor(
     @InjectRepository(User)
     private userRepo: Repository<User>,
+    private readonly emailService: EmailService,
+    private readonly configService: ConfigService,
   ) {}
 
   async create(data: CreateUserDto) {
@@ -26,18 +37,66 @@ export class UserService {
       throw new ConflictException('Cnpj já cadastrado');
     }
 
-    data.password = bcrypt.hashSync(data.password, 10);
-    const user = this.userRepo.create(data);
+    const token = this.generateEmailVerificationToken();
 
-    const userReturn = {
-      name: user.name,
-      cnpj: user.cnpj,
-      email: user.email,
-    };
+    const user = this.userRepo.create({
+      ...data,
+      password: await bcrypt.hash(data.password, 10),
+      emailVerifiedAt: null,
+      emailVerificationTokenHash: this.hashToken(token),
+      emailVerificationExpiresAt: this.getVerificationExpiration(),
+      emailVerificationSentAt: new Date(),
+    });
 
     await this.userRepo.save(user);
 
-    return userReturn;
+    //transaction
+    try {
+      await this.sendVerificationEmail(user, token);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Falha ao enviar e-mail de confirmação para ${user.email}: ${errorMessage}`,
+        errorStack,
+      );
+      await this.userRepo.remove(user);
+      throw new InternalServerErrorException(
+        'Erro ao enviar e-mail de confirmação. Cadastro desfeito. Por favor, tente novamente.',
+      );
+    }
+
+    return {
+      message:
+        'Cadastro realizado. Consulte seu e-mail para confirmar a conta.',
+    };
+  }
+
+  generateEmailVerificationToken(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  getVerificationExpiration(): Date {
+    const expiration = new Date();
+    expiration.setHours(expiration.getHours() + 24);
+    return expiration;
+  }
+
+  async sendVerificationEmail(user: User, token: string): Promise<void> {
+    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const verificationUrl = `${frontUrl}/confirmar-email?token=${encodeURIComponent(token)}`;
+
+    await this.emailService.sendEmailVerification(
+      user.email,
+      user.name,
+      verificationUrl,
+    );
   }
 
   findAll() {
@@ -57,9 +116,22 @@ export class UserService {
       where: {
         email,
       },
-      select: ['id', 'name', 'cnpj', 'email', 'password'],
+      select: ['id', 'name', 'cnpj', 'email', 'password', 'emailVerifiedAt'],
     });
   }
+
+  // findByEmailForVerification(email: string) {
+  //   return this.userRepo.findOne({
+  //     where: { email },
+  //     select: [
+  //       'id',
+  //       'name',
+  //       'email',
+  //       'emailVerifiedAt',
+  //       'emailVerificationSentAt',
+  //     ],
+  //   });
+  // }
 
   findByCnpj(cnpj: string) {
     return this.userRepo.findOne({
@@ -85,5 +157,25 @@ export class UserService {
 
   async clearRefreshTokenHash(userId: string) {
     await this.userRepo.update(userId, { refreshTokenHash: null });
+  }
+
+  async findByVerificationTokenHash(tokenHash: string) {
+    return this.userRepo.findOne({
+      where: { emailVerificationTokenHash: tokenHash },
+      select: [
+        'id',
+        'emailVerificationTokenHash',
+        'emailVerificationExpiresAt',
+      ],
+    });
+  }
+
+  async confirmEmail(userId: string) {
+    await this.userRepo.update(userId, {
+      emailVerifiedAt: new Date(),
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+      emailVerificationSentAt: null,
+    });
   }
 }

@@ -7,6 +7,7 @@ import { CurrentUser } from './decorators/user.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { type Response } from 'express';
+import { verifyEmailDto } from './dto/verify-email.dto';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -63,5 +64,13 @@ export class AuthController {
     res.clearCookie('refresh_token', { path: '/' });
 
     return this.authService.logout(user.id);
+  }
+
+  @Post('verify-email')
+  @ApiOperation({
+    summary: 'Confirma o e-mail usando o token recebido no link',
+  })
+  verifyEmail(@Body() dto: verifyEmailDto) {
+    return this.authService.verifyEmail(dto);
   }
 }

@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
@@ -6,6 +11,7 @@ import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from './types/jwt-payload.type';
+import { verifyEmailDto } from './dto/verify-email.dto';
 
 @Injectable()
 export class AuthService {
@@ -69,6 +75,10 @@ export class AuthService {
 
     if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
 
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException('Confirme seu e-mail antes de entrar.');
+    }
+
     return user;
   }
 
@@ -87,5 +97,24 @@ export class AuthService {
     ]);
 
     return { access_token, refresh_token };
+  }
+
+  async verifyEmail(dto: verifyEmailDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user = await this.userService.findByVerificationTokenHash(tokenHash);
+
+    if (
+      !user ||
+      !user.emailVerificationExpiresAt ||
+      user.emailVerificationExpiresAt < new Date()
+    ) {
+      throw new BadRequestException('Link de confirmação inválido ou expirado');
+    }
+
+    await this.userService.confirmEmail(user.id);
+
+    return {
+      message: 'E-mail confirmado com sucesso. Você já pode fazer login.',
+    };
   }
 }
