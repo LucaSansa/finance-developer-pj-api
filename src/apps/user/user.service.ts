@@ -74,31 +74,6 @@ export class UserService {
     };
   }
 
-  generateEmailVerificationToken(): string {
-    return randomBytes(32).toString('hex');
-  }
-
-  hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
-  getVerificationExpiration(): Date {
-    const expiration = new Date();
-    expiration.setHours(expiration.getHours() + 24);
-    return expiration;
-  }
-
-  async sendVerificationEmail(user: User, token: string): Promise<void> {
-    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
-    const verificationUrl = `${frontUrl}/confirmar-email?token=${encodeURIComponent(token)}`;
-
-    await this.emailService.sendEmailVerification(
-      user.email,
-      user.name,
-      verificationUrl,
-    );
-  }
-
   findAll() {
     return this.userRepo.find();
   }
@@ -119,19 +94,6 @@ export class UserService {
       select: ['id', 'name', 'cnpj', 'email', 'password', 'emailVerifiedAt'],
     });
   }
-
-  // findByEmailForVerification(email: string) {
-  //   return this.userRepo.findOne({
-  //     where: { email },
-  //     select: [
-  //       'id',
-  //       'name',
-  //       'email',
-  //       'emailVerifiedAt',
-  //       'emailVerificationSentAt',
-  //     ],
-  //   });
-  // }
 
   findByCnpj(cnpj: string) {
     return this.userRepo.findOne({
@@ -170,12 +132,58 @@ export class UserService {
     });
   }
 
+  generateEmailVerificationToken(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  getVerificationExpiration(): Date {
+    const expiration = new Date();
+    expiration.setHours(expiration.getHours() + 24);
+    return expiration;
+  }
+
+  async sendVerificationEmail(user: User, token: string): Promise<void> {
+    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const verificationUrl = `${frontUrl}/confirmar-email?token=${encodeURIComponent(token)}`;
+
+    await this.emailService.sendEmailVerification(
+      user.email,
+      user.name,
+      verificationUrl,
+    );
+  }
+
   async confirmEmail(userId: string) {
     await this.userRepo.update(userId, {
       emailVerifiedAt: new Date(),
       emailVerificationTokenHash: null,
       emailVerificationExpiresAt: null,
       emailVerificationSentAt: null,
+    });
+  }
+
+  findByEmailForVerification(email: string) {
+    return this.userRepo.findOne({
+      where: { email },
+      select: [
+        'id',
+        'name',
+        'email',
+        'emailVerifiedAt',
+        'emailVerificationSentAt',
+      ],
+    });
+  }
+
+  async saveNewVerificationToken(userId: string, token: string) {
+    await this.userRepo.update(userId, {
+      emailVerificationTokenHash: this.hashToken(token),
+      emailVerificationExpiresAt: this.getVerificationExpiration(),
+      emailVerificationSentAt: new Date(),
     });
   }
 }

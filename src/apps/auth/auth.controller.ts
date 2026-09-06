@@ -8,6 +8,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { type Response } from 'express';
 import { verifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -72,5 +73,11 @@ export class AuthController {
   })
   verifyEmail(@Body() dto: verifyEmailDto) {
     return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification-email')
+  @ApiOperation({ summary: 'Reenvia o link de confirmação de e-mail' })
+  resendVerificationEmail(@Body() dto: ResendVerificationEmailDto) {
+    return this.authService.resendVerificationEmail(dto);
   }
 }

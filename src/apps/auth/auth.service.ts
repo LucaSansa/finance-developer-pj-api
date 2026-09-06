@@ -12,6 +12,7 @@ import { createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from './types/jwt-payload.type';
 import { verifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
 
 @Injectable()
 export class AuthService {
@@ -66,22 +67,6 @@ export class AuthService {
     return { message: 'Logout realizado com sucesso' };
   }
 
-  async validateUser(email: string, password: string) {
-    const user = await this.userService.findByEmail(email);
-
-    if (!user) throw new UnauthorizedException('Usuario não encontrado.');
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
-
-    if (!user.emailVerifiedAt) {
-      throw new ForbiddenException('Confirme seu e-mail antes de entrar.');
-    }
-
-    return user;
-  }
-
   private async generateTokens(userId: string, email: string) {
     const payload: JwtPayload = { sub: userId, email };
 
@@ -97,6 +82,22 @@ export class AuthService {
     ]);
 
     return { access_token, refresh_token };
+  }
+
+  async validateUser(email: string, password: string) {
+    const user = await this.userService.findByEmail(email);
+
+    if (!user) throw new UnauthorizedException('Usuario não encontrado.');
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
+
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException('Confirme seu e-mail antes de entrar.');
+    }
+
+    return user;
   }
 
   async verifyEmail(dto: verifyEmailDto) {
@@ -115,6 +116,27 @@ export class AuthService {
 
     return {
       message: 'E-mail confirmado com sucesso. Você já pode fazer login.',
+    };
+  }
+
+  async resendVerificationEmail(dto: ResendVerificationEmailDto) {
+    const user = await this.userService.findByEmailForVerification(dto.email);
+
+    if (!user || user.emailVerifiedAt) {
+      return this.resendSuccessMessage();
+    }
+
+    const token = this.userService.generateEmailVerificationToken();
+    await this.userService.saveNewVerificationToken(user.id, token);
+    await this.userService.sendVerificationEmail(user, token);
+
+    return this.resendSuccessMessage();
+  }
+
+  private resendSuccessMessage() {
+    return {
+      message:
+        'Se existir uma conta pendente para este e-mail, enviamos uma nova confirmação.',
     };
   }
 }
