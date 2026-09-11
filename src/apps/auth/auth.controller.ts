@@ -9,6 +9,8 @@ import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { type Response } from 'express';
 import { verifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -79,5 +81,23 @@ export class AuthController {
   @ApiOperation({ summary: 'Reenvia o link de confirmação de e-mail' })
   resendVerificationEmail(@Body() dto: ResendVerificationEmailDto) {
     return this.authService.resendVerificationEmail(dto);
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({
+    summary:
+      'Envia um e-mail de recuperação de senha seguro para o e-mail solicitado',
+  })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({
+    summary:
+      'Aplica a redefinição de senha do usuário usando o token de verificação e a nova senha',
+  })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
   }
 }

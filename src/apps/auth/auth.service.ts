@@ -13,6 +13,8 @@ import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from './types/jwt-payload.type';
 import { verifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -137,6 +139,56 @@ export class AuthService {
     return {
       message:
         'Se existir uma conta pendente para este e-mail, enviamos uma nova confirmação.',
+    };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.userService.findByEmail(dto.email);
+
+    // Medida Anti-Enumeração: Não vaza a existência do e-mail ao cliente.
+    if (!user) {
+      return this.forgotPasswordSuccessMessage();
+    }
+
+    // Gera um token hexadecimal aleatório e seguro
+    const token = this.userService.generateEmailVerificationToken();
+
+    await this.userService.saveNewPasswordResetToken(user.id, token);
+    await this.userService.sendPasswordResetEmail(user, token);
+
+    return this.forgotPasswordSuccessMessage();
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user = await this.userService.findByPasswordResetTokenHash(tokenHash);
+
+    if (
+      !user ||
+      !user.passwordResetExpiresAt ||
+      user.passwordResetExpiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'Token de redefinição de senha inválido ou expirado',
+      );
+    }
+
+    // Hash da nova senha com 10 rounds de salt
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    // Atualiza campo e invalida dados anteriores temporários
+    await this.userService.updatePassword(user.id, passwordHash);
+
+    return {
+      message:
+        'Sua senha foi redefinida com sucesso. Você já pode fazer login com as novas credenciais.',
+    };
+  }
+
+  private forgotPasswordSuccessMessage() {
+    return {
+      message:
+        'Se o e-mail informado estiver cadastrado, enviamos um link para redefinição de senha.',
     };
   }
 }

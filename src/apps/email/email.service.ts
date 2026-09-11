@@ -39,4 +39,31 @@ export class EmailService {
       `,
     });
   }
+
+  async sendPasswordReset(
+    recipientEmail: string,
+    recipientName: string,
+    resetUrl: string,
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.configService.getOrThrow<string>('MAIL_FROM'),
+      to: recipientEmail,
+      subject: 'Recuperação de Senha',
+      text: `Olá, ${recipientName}. Redefina sua senha acessando o endereço: ${resetUrl}`,
+      html: `
+        <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #f0f0f0; border-radius: 8px;">
+          <h2 style="color: #4f46e5; text-align: center;">Recuperação de Senha</h2>
+          <p>Olá, <strong>${recipientName}</strong>.</p>
+          <p>Recebemos uma solicitação de redefinição de senha para a sua conta de controle financeiro.</p>
+          <p>Para prosseguir e redefinir sua senha, clique no botão em destaque e preencha o formulário:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #4f46e5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Redefinir Minha Senha</a>
+          </div>
+          <p style="color: #666; font-size: 14px;">Este link é válido por <strong>1 hora</strong> devido a medidas de segurança.</p>
+          <hr style="border: 0; border-top: 1px solid #f0f0f0; margin: 30px 0;" />
+          <p style="font-size: 12px; color: #999;">Se você não solicitou este procedimento, ignore este e-mail. A sua senha atual permanecerá totalmente segura.</p>
+        </div>
+      `,
+    });
+  }
 }

@@ -186,4 +186,44 @@ export class UserService {
       emailVerificationSentAt: new Date(),
     });
   }
+
+  async findByPasswordResetTokenHash(tokenHash: string) {
+    return this.userRepo
+      .createQueryBuilder('user')
+      .addSelect('user.passwordResetTokenHash')
+      .addSelect('user.passwordResetExpiresAt')
+      .where('user.password_reset_token_hash = :hash', { hash: tokenHash })
+      .getOne();
+  }
+
+  async saveNewPasswordResetToken(userId: string, token: string) {
+    const expiration = new Date();
+    expiration.setHours(expiration.getHours() + 1); // Token expira em 1 hora
+
+    await this.userRepo.update(userId, {
+      passwordResetTokenHash: this.hashToken(token),
+      passwordResetExpiresAt: expiration,
+      passwordResetSentAt: new Date(),
+    });
+  }
+
+  async sendPasswordResetEmail(
+    user: { email: string; name: string },
+    token: string,
+  ): Promise<void> {
+    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const resetUrl = `${frontUrl}/redefinir-senha?token=${encodeURIComponent(token)}`;
+
+    await this.emailService.sendPasswordReset(user.email, user.name, resetUrl);
+  }
+
+  async updatePassword(userId: string, passwordHash: string) {
+    await this.userRepo.update(userId, {
+      password: passwordHash,
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
+      passwordResetSentAt: null,
+      refreshTokenHash: null, // Força deslogar sessões antigas por segurança
+    });
+  }
 }

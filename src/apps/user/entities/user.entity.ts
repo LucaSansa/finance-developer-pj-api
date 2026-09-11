@@ -47,6 +47,30 @@ export class User extends BaseEntity<User> {
     type: 'varchar',
     select: false,
     nullable: true,
+    name: 'password_reset_token_hash',
+  })
+  passwordResetTokenHash: string | null;
+
+  @Column({
+    type: 'timestamp with time zone',
+    select: false,
+    nullable: true,
+    name: 'password_reset_expires_at',
+  })
+  passwordResetExpiresAt: Date | null;
+
+  @Column({
+    type: 'timestamp with time zone',
+    select: false,
+    nullable: true,
+    name: 'password_reset_sent_at',
+  })
+  passwordResetSentAt: Date | null;
+
+  @Column({
+    type: 'varchar',
+    select: false,
+    nullable: true,
     name: 'refresh_token_hash',
   })
   refreshTokenHash: string | null;
