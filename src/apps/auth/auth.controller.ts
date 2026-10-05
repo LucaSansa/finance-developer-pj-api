@@ -11,6 +11,7 @@ import { verifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ConfirmEmailChangeDto } from '../user/dto/confirm-email-change.dto';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -99,5 +100,14 @@ export class AuthController {
   })
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Post('confirm-email-change')
+  @ApiOperation({
+    summary:
+      'Confirma a troca de e-mail usando o token enviado ao novo endereço',
+  })
+  confirmEmailChange(@Body() dto: ConfirmEmailChangeDto) {
+    return this.authService.confirmEmailChange(dto);
   }
 }

@@ -289,4 +289,63 @@ export class UserService {
       message: 'Enviamos um link de confirmação para o novo endereço.',
     };
   }
+
+  async findByEmailChangeTokenHash(tokenHash: string) {
+    return this.userRepo
+      .createQueryBuilder('user')
+      .addSelect('user.emailChangeTokenHash')
+      .addSelect('user.emailChangeExpiresAt')
+      .where('user.emailChangeTokenHash = :tokenHash', { tokenHash })
+      .getOne();
+  }
+
+  async applyPendingEmailChange(
+    userId: string,
+    tokenHash: string,
+    pendingEmail: string,
+    now: Date,
+  ): Promise<boolean> {
+    try {
+      const result = await this.userRepo
+        .createQueryBuilder('user')
+        .update(User)
+        .set({
+          email: pendingEmail,
+          emailVerifiedAt: now,
+          pendingEmail: null,
+          emailChangeTokenHash: null,
+          emailChangeExpiresAt: null,
+          refreshTokenHash: null,
+        })
+        .where('"id" = :userId', { userId })
+        .andWhere('"email_change_token_hash" = :tokenHash', { tokenHash })
+        .andWhere('"pending_email" = :pendingEmail', { pendingEmail })
+        .execute();
+
+      return result.affected === 1;
+    } catch (error) {
+      if (this.isPostgresUniqueViolation(error)) {
+        throw new ConflictException('Este e-mail já está cadastrado.');
+      }
+      throw error;
+    }
+  }
+
+  private isPostgresUniqueViolation(error: unknown): boolean {
+    if (
+      typeof error !== 'object' ||
+      error === null ||
+      !('driverError' in error)
+    ) {
+      return false;
+    }
+
+    const driverError = error.driverError;
+    return (
+      typeof driverError === 'object' &&
+      driverError !== null &&
+      'code' in driverError &&
+      driverError.code === '23505'
+    );
+  }
 }

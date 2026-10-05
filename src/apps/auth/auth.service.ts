@@ -15,6 +15,7 @@ import { verifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ConfirmEmailChangeDto } from '../user/dto/confirm-email-change.dto';
 
 @Injectable()
 export class AuthService {
@@ -189,6 +190,36 @@ export class AuthService {
     return {
       message:
         'Se o e-mail informado estiver cadastrado, enviamos um link para redefinição de senha.',
+    };
+  }
+
+  async confirmEmailChange(dto: ConfirmEmailChangeDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user = await this.userService.findByEmailChangeTokenHash(tokenHash);
+    const now = new Date();
+
+    if (
+      !user ||
+      !user.pendingEmail ||
+      !user.emailChangeExpiresAt ||
+      user.emailChangeExpiresAt <= now
+    ) {
+      throw new BadRequestException('Link inválido ou expirado');
+    }
+
+    const updated = await this.userService.applyPendingEmailChange(
+      user.id,
+      tokenHash,
+      user.pendingEmail,
+      now,
+    );
+
+    if (!updated) {
+      throw new BadRequestException('Link inválido, expirado ou já utilizado.');
+    }
+
+    return {
+      message: 'Email da conta atualizado e confirmado com sucesso',
     };
   }
 }
