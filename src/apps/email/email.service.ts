@@ -66,4 +66,29 @@ export class EmailService {
       `,
     });
   }
+
+  async sendEmailChangeConfirmation(
+    recipientEmail: string,
+    recipientName: string,
+    confirmationUrl: string,
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.configService.getOrThrow<string>('MAIL_FROM'),
+      to: recipientEmail,
+      subject: 'Confirme a troca do seu email',
+      text: [
+        `Olá, ${recipientName}.`,
+        'Foi solicitada uma troca de e-mail para esta conta.',
+        `Confirme o novo endereço acessando: ${confirmationUrl}`,
+        'Este link expira em 1 hora. Se você não solicitou a troca, ignore esta mensagem.',
+      ].join('\n\n'),
+      html: `
+      <p>Olá, ${recipientName}.</p>
+      <p>Foi solicitada uma troca de e-mail para esta conta.</p>
+      <p><a href="${confirmationUrl}">Confirmar novo e-mail</a></p>
+      <p>Este link expira em 1 hora.</p>
+      <p>Se você não solicitou a troca, ignore esta mensagem. Seu e-mail atual não será alterado.</p>
+    `,
+    });
+  }
 }

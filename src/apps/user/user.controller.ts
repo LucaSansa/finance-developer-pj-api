@@ -1,7 +1,6 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { AuthGuard } from '@nestjs/passport';
 import { CurrentUser } from '../auth/decorators/user.decorator';
 import {
   ApiCreatedResponse,
@@ -12,6 +11,7 @@ import {
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RequestEmailChangeDto } from './dto/request-email-change.dto';
 
 @Controller('users')
 @ApiTags('Users')
@@ -32,5 +32,15 @@ export class UserController {
   @ApiOkResponse({ type: UserResponseDto })
   findByMe(@CurrentUser() user: { id: string; email: string }) {
     return this.userService.findById(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('me/email-change')
+  @ApiOperation({ summary: 'Solicita a troca do e-mail da conta' })
+  requestEmailChange(
+    @CurrentUser() user: { id: string },
+    @Body() dto: RequestEmailChangeDto,
+  ) {
+    return this.userService.requestEmailChange(user.id, dto.email);
   }
 }

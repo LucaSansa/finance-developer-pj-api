@@ -67,6 +67,25 @@ export class User extends BaseEntity<User> {
   })
   passwordResetSentAt: Date | null;
 
+  @Column({ type: 'varchar', nullable: true, name: 'pending_email' })
+  pendingEmail: string | null;
+
+  @Column({
+    type: 'varchar',
+    nullable: true,
+    select: false,
+    name: 'email_change_token_hash',
+  })
+  emailChangeTokenHash: string | null;
+
+  @Column({
+    type: 'timestamp with time zone',
+    nullable: true,
+    select: false,
+    name: 'email_change_expires_at',
+  })
+  emailChangeExpiresAt: Date | null;
+
   @Column({
     type: 'varchar',
     select: false,

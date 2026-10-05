@@ -3,6 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  NotFoundException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -225,5 +226,67 @@ export class UserService {
       passwordResetSentAt: null,
       refreshTokenHash: null, // Força deslogar sessões antigas por segurança
     });
+  }
+
+  async sendEmailChangeConfirmation(
+    user: User,
+    recipientEmail: string,
+    token: string,
+  ): Promise<void> {
+    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const confirmationUrl = `${frontUrl}/confirmar-troca-email?token=${encodeURIComponent(token)}`;
+
+    await this.emailService.sendEmailChangeConfirmation(
+      recipientEmail,
+      user.name,
+      confirmationUrl,
+    );
+  }
+
+  async requestEmailChange(userId: string, email: string) {
+    const user = await this.findById(userId);
+
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+
+    if (user?.email === email) {
+      throw new ConflictException('Informe um e-mail diferente do atual.');
+    }
+
+    const emailRegistered = await this.findByEmail(email);
+
+    if (emailRegistered) {
+      throw new ConflictException('Este email já foi cadastrado');
+    }
+
+    const token = this.generateEmailVerificationToken();
+
+    await this.userRepo.update(userId, {
+      pendingEmail: email,
+      emailChangeTokenHash: this.hashToken(token),
+      emailChangeExpiresAt: this.getVerificationExpiration(),
+    });
+
+    try {
+      await this.sendEmailChangeConfirmation(user, email, token);
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+
+      this.logger.error(
+        `Falha ao enviar confirmação de troca de e-mail: ${errorMessage}`,
+      );
+
+      throw new InternalServerErrorException(
+        'Não foi possível enviar o e-mail de confirmação. Tente novamente.',
+        errorStack,
+      );
+    }
+
+    return {
+      message: 'Enviamos um link de confirmação para o novo endereço.',
+    };
   }
 }
