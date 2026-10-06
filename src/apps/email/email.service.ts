@@ -1,22 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class EmailService {
   private readonly transporter: nodemailer.Transporter;
 
-  constructor(private readonly configService: ConfigService) {
+  constructor() {
     this.transporter = nodemailer.createTransport({
-      host: this.configService.getOrThrow<string>('MAIL_HOST'),
-      port: Number(this.configService.getOrThrow<string>('MAIL_PORT')),
-      secure: this.configService.get<string>('MAIL_SECURE') === 'true',
-      auth: this.configService.get<string>('MAIL_USER')
-        ? {
-            user: this.configService.getOrThrow<string>('MAIL_USER'),
-            pass: this.configService.getOrThrow<string>('MAIL_PASSWORD'),
-          }
-        : undefined,
+      host: process.env.MAIL_HOST,
+      port: Number(process.env.MAIL_PORT),
+      secure: process.env.MAIL_SECURE === 'true',
+      auth: {
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASSWORD,
+      },
     });
   }
 
@@ -26,7 +23,7 @@ export class EmailService {
     verificationUrl: string,
   ) {
     await this.transporter.sendMail({
-      from: this.configService.getOrThrow<string>('MAIL_FROM'),
+      from: process.env.MAIL_FROM,
       to: receipientEmail,
       subject: 'Confirme seu e-mail',
       text: `Olá, ${recipientName}. Confirme seu e-mail acessando: ${verificationUrl}`,
@@ -46,7 +43,7 @@ export class EmailService {
     resetUrl: string,
   ): Promise<void> {
     await this.transporter.sendMail({
-      from: this.configService.getOrThrow<string>('MAIL_FROM'),
+      from: process.env.MAIL_FROM,
       to: recipientEmail,
       subject: 'Recuperação de Senha',
       text: `Olá, ${recipientName}. Redefina sua senha acessando o endereço: ${resetUrl}`,
@@ -73,7 +70,7 @@ export class EmailService {
     confirmationUrl: string,
   ): Promise<void> {
     await this.transporter.sendMail({
-      from: this.configService.getOrThrow<string>('MAIL_FROM'),
+      from: process.env.MAIL_FROM,
       to: recipientEmail,
       subject: 'Confirme a troca do seu email',
       text: [

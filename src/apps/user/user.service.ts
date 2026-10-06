@@ -12,7 +12,6 @@ import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { EmailService } from '../email/email.service';
-import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class UserService {
@@ -22,7 +21,6 @@ export class UserService {
     @InjectRepository(User)
     private userRepo: Repository<User>,
     private readonly emailService: EmailService,
-    private readonly configService: ConfigService,
   ) {}
 
   async create(data: CreateUserDto) {
@@ -80,7 +78,7 @@ export class UserService {
     user: User,
     token: string,
   ): Promise<void> {
-    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const frontUrl = process.env.FRONTEND_URL;
     const verificationUrl = `${frontUrl}/confirmar-email?token=${encodeURIComponent(token)}`;
 
     await this.emailService.sendEmailVerification(
@@ -111,7 +109,7 @@ export class UserService {
     user: { email: string; name: string },
     token: string,
   ): Promise<void> {
-    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const frontUrl = process.env.FRONTEND_URL;
     const resetUrl = `${frontUrl}/redefinir-senha?token=${encodeURIComponent(token)}`;
 
     await this.emailService.sendPasswordReset(user.email, user.name, resetUrl);
@@ -144,7 +142,7 @@ export class UserService {
     recipientEmail: string,
     token: string,
   ): Promise<void> {
-    const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
+    const frontUrl = process.env.FRONTEND_URL;
     const confirmationUrl = `${frontUrl}/confirmar-troca-email?token=${encodeURIComponent(token)}`;
 
     await this.emailService.sendEmailChangeConfirmation(

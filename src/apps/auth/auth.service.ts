@@ -9,7 +9,6 @@ import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
-import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from './types/jwt-payload.type';
 import { verifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
@@ -17,6 +16,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ConfirmEmailChangeDto } from '../user/dto/confirm-email-change.dto';
 import { UserRepository } from '../user/repositories/user.repository';
+import { JwtSignOptions } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
@@ -24,7 +24,6 @@ export class AuthService {
     private readonly userService: UserService,
     private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -120,14 +119,28 @@ export class AuthService {
   private async generateTokens(userId: string, email: string) {
     const payload: JwtPayload = { sub: userId, email };
 
+    const accessSecret = process.env.JWT_ACCESS_SECRET;
+    const accessExpiresIn = process.env.JWT_ACCESS_EXPIRES_IN;
+    const refreshSecret = process.env.JWT_REFRESH_SECRET;
+    const refreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN;
+
+    if (
+      !accessSecret ||
+      !accessExpiresIn ||
+      !refreshSecret ||
+      !refreshExpiresIn
+    ) {
+      throw new Error('Variáveis de ambiente dos tokens não configuradas.');
+    }
+
     const [access_token, refresh_token] = await Promise.all([
       this.jwtService.signAsync(payload, {
-        secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.getOrThrow('JWT_ACCESS_EXPIRES_IN'),
+        secret: accessSecret,
+        expiresIn: accessExpiresIn as JwtSignOptions['expiresIn'],
       }),
       this.jwtService.signAsync(payload, {
-        secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
+        secret: refreshSecret,
+        expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'],
       }),
     ]);
 
