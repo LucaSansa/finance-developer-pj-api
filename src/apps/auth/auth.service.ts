@@ -16,11 +16,13 @@ import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto'
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ConfirmEmailChangeDto } from '../user/dto/confirm-email-change.dto';
+import { UserRepository } from '../user/repositories/user.repository';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
+    private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -30,7 +32,11 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user.id, user.email);
 
-    await this.userService.saveRefreshTokenHash(user.id, tokens.refresh_token);
+    const refreshTokenHash = createHash('sha256')
+      .update(tokens.refresh_token)
+      .digest('hex');
+
+    await this.userRepository.saveRefreshTokenHash(user.id, refreshTokenHash);
 
     return {
       user: {
@@ -43,7 +49,7 @@ export class AuthService {
   }
 
   async refresh(userId: string, email: string, incomingRefreshToken: string) {
-    const user = await this.userService.findByIdWithRefreshHash(userId);
+    const user = await this.userRepository.findByIdWithRefreshHash(userId);
 
     if (!user?.refreshTokenHash) {
       throw new UnauthorizedException('Refresh token inválido');
@@ -54,20 +60,61 @@ export class AuthService {
       .digest('hex');
 
     if (incomingHash !== user.refreshTokenHash) {
-      await this.userService.clearRefreshTokenHash(userId);
+      await this.userRepository.clearRefreshTokenHash(userId);
       throw new UnauthorizedException('Refresh token invalido ou ja utilizado');
     }
 
     const tokens = await this.generateTokens(userId, email);
 
-    await this.userService.saveRefreshTokenHash(userId, tokens.refresh_token);
+    const refreshTokenHash = createHash('sha256')
+      .update(tokens.refresh_token)
+      .digest('hex');
+
+    await this.userRepository.saveRefreshTokenHash(userId, refreshTokenHash);
 
     return tokens;
   }
 
   async logout(userId: string) {
-    await this.userService.clearRefreshTokenHash(userId);
+    await this.userRepository.clearRefreshTokenHash(userId);
     return { message: 'Logout realizado com sucesso' };
+  }
+
+  async verifyEmailRegistered(dto: verifyEmailDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user =
+      await this.userRepository.findByEmailVerificationTokenHash(tokenHash);
+
+    if (
+      !user ||
+      !user.emailVerificationExpiresAt ||
+      user.emailVerificationExpiresAt < new Date()
+    ) {
+      throw new BadRequestException('Link de confirmação inválido ou expirado');
+    }
+
+    await this.userService.confirmEmail(user.id);
+
+    return {
+      message: 'E-mail confirmado com sucesso. Você já pode fazer login.',
+    };
+  }
+
+  async resendVerificationRegisterEmail(dto: ResendVerificationEmailDto) {
+    const user = await this.userRepository.findByEmailForResendVerification(
+      dto.email,
+    );
+
+    //Evita que o usuários mal intencionados saibam se a conta esta cadastrada, ou se ja foi confirmada
+    if (!user || user.emailVerifiedAt) {
+      return this.resendVerificationRegisterEmailSuccessMessage();
+    }
+
+    const token = this.userService.generateEmailVerificationToken();
+    await this.userService.saveNewVerificationToken(user.id, token);
+    await this.userService.sendVerificationRegisterEmail(user, token);
+
+    return this.resendVerificationRegisterEmailSuccessMessage();
   }
 
   private async generateTokens(userId: string, email: string) {
@@ -87,66 +134,10 @@ export class AuthService {
     return { access_token, refresh_token };
   }
 
-  async validateUser(email: string, password: string) {
-    const user = await this.userService.findByEmail(email);
-
-    if (!user) throw new UnauthorizedException('Usuario não encontrado.');
-
-    const isMatch = await bcrypt.compare(password, user.password);
-
-    if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
-
-    if (!user.emailVerifiedAt) {
-      throw new ForbiddenException('Confirme seu e-mail antes de entrar.');
-    }
-
-    return user;
-  }
-
-  async verifyEmail(dto: verifyEmailDto) {
-    const tokenHash = this.userService.hashToken(dto.token);
-    const user = await this.userService.findByVerificationTokenHash(tokenHash);
-
-    if (
-      !user ||
-      !user.emailVerificationExpiresAt ||
-      user.emailVerificationExpiresAt < new Date()
-    ) {
-      throw new BadRequestException('Link de confirmação inválido ou expirado');
-    }
-
-    await this.userService.confirmEmail(user.id);
-
-    return {
-      message: 'E-mail confirmado com sucesso. Você já pode fazer login.',
-    };
-  }
-
-  async resendVerificationEmail(dto: ResendVerificationEmailDto) {
-    const user = await this.userService.findByEmailForVerification(dto.email);
-
-    if (!user || user.emailVerifiedAt) {
-      return this.resendSuccessMessage();
-    }
-
-    const token = this.userService.generateEmailVerificationToken();
-    await this.userService.saveNewVerificationToken(user.id, token);
-    await this.userService.sendVerificationEmail(user, token);
-
-    return this.resendSuccessMessage();
-  }
-
-  private resendSuccessMessage() {
-    return {
-      message:
-        'Se existir uma conta pendente para este e-mail, enviamos uma nova confirmação.',
-    };
-  }
-
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.userService.findByEmail(dto.email);
 
-    // Medida Anti-Enumeração: Não vaza a existência do e-mail ao cliente.
+    //Não vaza a existência do e-mail ao cliente.
     if (!user) {
       return this.forgotPasswordSuccessMessage();
     }
@@ -162,7 +153,8 @@ export class AuthService {
 
   async resetPassword(dto: ResetPasswordDto) {
     const tokenHash = this.userService.hashToken(dto.token);
-    const user = await this.userService.findByPasswordResetTokenHash(tokenHash);
+    const user =
+      await this.userRepository.findByPasswordResetTokenHash(tokenHash);
 
     if (
       !user ||
@@ -186,16 +178,10 @@ export class AuthService {
     };
   }
 
-  private forgotPasswordSuccessMessage() {
-    return {
-      message:
-        'Se o e-mail informado estiver cadastrado, enviamos um link para redefinição de senha.',
-    };
-  }
-
   async confirmEmailChange(dto: ConfirmEmailChangeDto) {
     const tokenHash = this.userService.hashToken(dto.token);
-    const user = await this.userService.findByEmailChangeTokenHash(tokenHash);
+    const user =
+      await this.userRepository.findByEmailChangeTokenHash(tokenHash);
     const now = new Date();
 
     if (
@@ -220,6 +206,36 @@ export class AuthService {
 
     return {
       message: 'Email da conta atualizado e confirmado com sucesso',
+    };
+  }
+
+  async validateUser(email: string, password: string) {
+    const user = await this.userService.findByEmail(email);
+
+    if (!user) throw new UnauthorizedException('Usuario não encontrado.');
+
+    const isMatch = await bcrypt.compare(password, user.password);
+
+    if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
+
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException('Confirme seu e-mail antes de entrar.');
+    }
+
+    return user;
+  }
+
+  private resendVerificationRegisterEmailSuccessMessage() {
+    return {
+      message:
+        'Se existir uma conta pendente para este e-mail, enviamos uma nova confirmação.',
+    };
+  }
+
+  private forgotPasswordSuccessMessage() {
+    return {
+      message:
+        'Se o e-mail informado estiver cadastrado, enviamos um link para redefinição de senha.',
     };
   }
 }

@@ -32,7 +32,11 @@ export class UserService {
       throw new ConflictException('E-mail já cadastrado');
     }
 
-    const existingCnpj = await this.findByCnpj(data.cnpj);
+    const existingCnpj = await this.userRepo.findOne({
+      where: {
+        cnpj: data.cnpj,
+      },
+    });
 
     if (existingCnpj) {
       throw new ConflictException('Cnpj já cadastrado');
@@ -45,15 +49,14 @@ export class UserService {
       password: await bcrypt.hash(data.password, 10),
       emailVerifiedAt: null,
       emailVerificationTokenHash: this.hashToken(token),
-      emailVerificationExpiresAt: this.getVerificationExpiration(),
+      emailVerificationExpiresAt: this.getVerificationExpiration(24),
       emailVerificationSentAt: new Date(),
     });
 
     await this.userRepo.save(user);
 
-    //transaction
     try {
-      await this.sendVerificationEmail(user, token);
+      await this.sendVerificationRegisterEmail(user, token);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
@@ -63,10 +66,8 @@ export class UserService {
         `Falha ao enviar e-mail de confirmação para ${user.email}: ${errorMessage}`,
         errorStack,
       );
-      await this.userRepo.remove(user);
-      throw new InternalServerErrorException(
-        'Erro ao enviar e-mail de confirmação. Cadastro desfeito. Por favor, tente novamente.',
-      );
+
+      throw new InternalServerErrorException('Erro ao enviar o email.');
     }
 
     return {
@@ -75,79 +76,10 @@ export class UserService {
     };
   }
 
-  findAll() {
-    return this.userRepo.find();
-  }
-
-  findById(id: string) {
-    return this.userRepo.findOne({
-      where: {
-        id,
-      },
-    });
-  }
-
-  findByEmail(email: string) {
-    return this.userRepo.findOne({
-      where: {
-        email,
-      },
-      select: ['id', 'name', 'cnpj', 'email', 'password', 'emailVerifiedAt'],
-    });
-  }
-
-  findByCnpj(cnpj: string) {
-    return this.userRepo.findOne({
-      where: {
-        cnpj: cnpj,
-      },
-      select: ['name', 'cnpj', 'email'],
-    });
-  }
-
-  async saveRefreshTokenHash(userId: string, refreshToken: string) {
-    const hash = createHash('sha256').update(refreshToken).digest('hex');
-    await this.userRepo.update(userId, { refreshTokenHash: hash });
-  }
-
-  async findByIdWithRefreshHash(userId: string) {
-    return this.userRepo
-      .createQueryBuilder('user')
-      .addSelect('user.refreshTokenHash')
-      .where('user.id = :id', { id: userId })
-      .getOne();
-  }
-
-  async clearRefreshTokenHash(userId: string) {
-    await this.userRepo.update(userId, { refreshTokenHash: null });
-  }
-
-  async findByVerificationTokenHash(tokenHash: string) {
-    return this.userRepo.findOne({
-      where: { emailVerificationTokenHash: tokenHash },
-      select: [
-        'id',
-        'emailVerificationTokenHash',
-        'emailVerificationExpiresAt',
-      ],
-    });
-  }
-
-  generateEmailVerificationToken(): string {
-    return randomBytes(32).toString('hex');
-  }
-
-  hashToken(token: string): string {
-    return createHash('sha256').update(token).digest('hex');
-  }
-
-  getVerificationExpiration(): Date {
-    const expiration = new Date();
-    expiration.setHours(expiration.getHours() + 24);
-    return expiration;
-  }
-
-  async sendVerificationEmail(user: User, token: string): Promise<void> {
+  async sendVerificationRegisterEmail(
+    user: User,
+    token: string,
+  ): Promise<void> {
     const frontUrl = this.configService.getOrThrow<string>('FRONTEND_URL');
     const verificationUrl = `${frontUrl}/confirmar-email?token=${encodeURIComponent(token)}`;
 
@@ -167,44 +99,11 @@ export class UserService {
     });
   }
 
-  findByEmailForVerification(email: string) {
-    return this.userRepo.findOne({
-      where: { email },
-      select: [
-        'id',
-        'name',
-        'email',
-        'emailVerifiedAt',
-        'emailVerificationSentAt',
-      ],
-    });
-  }
-
   async saveNewVerificationToken(userId: string, token: string) {
     await this.userRepo.update(userId, {
       emailVerificationTokenHash: this.hashToken(token),
-      emailVerificationExpiresAt: this.getVerificationExpiration(),
+      emailVerificationExpiresAt: this.getVerificationExpiration(24),
       emailVerificationSentAt: new Date(),
-    });
-  }
-
-  async findByPasswordResetTokenHash(tokenHash: string) {
-    return this.userRepo
-      .createQueryBuilder('user')
-      .addSelect('user.passwordResetTokenHash')
-      .addSelect('user.passwordResetExpiresAt')
-      .where('user.password_reset_token_hash = :hash', { hash: tokenHash })
-      .getOne();
-  }
-
-  async saveNewPasswordResetToken(userId: string, token: string) {
-    const expiration = new Date();
-    expiration.setHours(expiration.getHours() + 1); // Token expira em 1 hora
-
-    await this.userRepo.update(userId, {
-      passwordResetTokenHash: this.hashToken(token),
-      passwordResetExpiresAt: expiration,
-      passwordResetSentAt: new Date(),
     });
   }
 
@@ -218,6 +117,17 @@ export class UserService {
     await this.emailService.sendPasswordReset(user.email, user.name, resetUrl);
   }
 
+  async saveNewPasswordResetToken(userId: string, token: string) {
+    const expiration = new Date();
+    expiration.setHours(expiration.getHours() + 1);
+
+    await this.userRepo.update(userId, {
+      passwordResetTokenHash: this.hashToken(token),
+      passwordResetExpiresAt: expiration,
+      passwordResetSentAt: new Date(),
+    });
+  }
+
   async updatePassword(userId: string, passwordHash: string) {
     await this.userRepo.update(userId, {
       password: passwordHash,
@@ -228,6 +138,7 @@ export class UserService {
     });
   }
 
+  //refatorar
   async sendEmailChangeConfirmation(
     user: User,
     recipientEmail: string,
@@ -265,7 +176,7 @@ export class UserService {
     await this.userRepo.update(userId, {
       pendingEmail: email,
       emailChangeTokenHash: this.hashToken(token),
-      emailChangeExpiresAt: this.getVerificationExpiration(),
+      emailChangeExpiresAt: this.getVerificationExpiration(1),
     });
 
     try {
@@ -290,15 +201,6 @@ export class UserService {
     };
   }
 
-  async findByEmailChangeTokenHash(tokenHash: string) {
-    return this.userRepo
-      .createQueryBuilder('user')
-      .addSelect('user.emailChangeTokenHash')
-      .addSelect('user.emailChangeExpiresAt')
-      .where('user.emailChangeTokenHash = :tokenHash', { tokenHash })
-      .getOne();
-  }
-
   async applyPendingEmailChange(
     userId: string,
     tokenHash: string,
@@ -306,21 +208,21 @@ export class UserService {
     now: Date,
   ): Promise<boolean> {
     try {
-      const result = await this.userRepo
-        .createQueryBuilder('user')
-        .update(User)
-        .set({
+      const result = await this.userRepo.update(
+        {
+          id: userId,
+          emailChangeTokenHash: tokenHash,
+          pendingEmail,
+        },
+        {
           email: pendingEmail,
           emailVerifiedAt: now,
           pendingEmail: null,
           emailChangeTokenHash: null,
           emailChangeExpiresAt: null,
           refreshTokenHash: null,
-        })
-        .where('"id" = :userId', { userId })
-        .andWhere('"email_change_token_hash" = :tokenHash', { tokenHash })
-        .andWhere('"pending_email" = :pendingEmail', { pendingEmail })
-        .execute();
+        },
+      );
 
       return result.affected === 1;
     } catch (error) {
@@ -329,6 +231,37 @@ export class UserService {
       }
       throw error;
     }
+  }
+
+  findByEmail(email: string) {
+    return this.userRepo.findOne({
+      where: {
+        email,
+      },
+      select: ['id', 'name', 'cnpj', 'email', 'password', 'emailVerifiedAt'],
+    });
+  }
+
+  findById(id: string) {
+    return this.userRepo.findOne({
+      where: {
+        id,
+      },
+    });
+  }
+
+  generateEmailVerificationToken(): string {
+    return randomBytes(32).toString('hex');
+  }
+
+  hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  getVerificationExpiration(expirationInHours: number): Date {
+    const expiration = new Date();
+    expiration.setHours(expiration.getHours() + expirationInHours);
+    return expiration;
   }
 
   private isPostgresUniqueViolation(error: unknown): boolean {

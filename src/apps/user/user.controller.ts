@@ -12,6 +12,7 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequestEmailChangeDto } from './dto/request-email-change.dto';
+import { CreateUserResponseDto } from './dto/create-user-dto';
 
 @Controller('users')
 @ApiTags('Users')
@@ -21,7 +22,7 @@ export class UserController {
 
   @Post()
   @ApiOperation({ summary: 'Cria um novo usuário' })
-  @ApiCreatedResponse({ type: UserResponseDto })
+  @ApiCreatedResponse({ type: CreateUserResponseDto })
   create(@Body() data: CreateUserDto) {
     return this.userService.create(data);
   }

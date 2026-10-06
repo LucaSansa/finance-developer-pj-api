@@ -74,14 +74,14 @@ export class AuthController {
   @ApiOperation({
     summary: 'Confirma o e-mail usando o token recebido no link',
   })
-  verifyEmail(@Body() dto: verifyEmailDto) {
-    return this.authService.verifyEmail(dto);
+  verifyEmailRegistered(@Body() dto: verifyEmailDto) {
+    return this.authService.verifyEmailRegistered(dto);
   }
 
   @Post('resend-verification-email')
   @ApiOperation({ summary: 'Reenvia o link de confirmação de e-mail' })
-  resendVerificationEmail(@Body() dto: ResendVerificationEmailDto) {
-    return this.authService.resendVerificationEmail(dto);
+  resendVerificationRegisterEmail(@Body() dto: ResendVerificationEmailDto) {
+    return this.authService.resendVerificationRegisterEmail(dto);
   }
 
   @Post('forgot-password')
