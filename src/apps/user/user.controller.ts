@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  ClassSerializerInterceptor,
+  Controller,
+  Get,
+  Patch,
+  Post,
+  SerializeOptions,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { CurrentUser } from '../auth/decorators/user.decorator';
@@ -12,7 +22,8 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { UserResponseDto } from './dto/user-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequestEmailChangeDto } from './dto/request-email-change.dto';
-import { CreateUserResponseDto } from './dto/create-user-dto';
+import { CreateUserResponseDto } from './dto/create-user-response.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Controller('users')
 @ApiTags('Users')
@@ -28,6 +39,18 @@ export class UserController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @UseInterceptors(ClassSerializerInterceptor)
+  @SerializeOptions({ type: UserResponseDto, excludeExtraneousValues: true })
+  @Patch()
+  @ApiOperation({ summary: 'Atualiza informaçãos de perfil do usuário' })
+  @ApiOkResponse({ type: UserResponseDto })
+  update(@CurrentUser() user: { id: string }, @Body() dto: UpdateUserDto) {
+    return this.userService.update(user.id, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(ClassSerializerInterceptor)
+  @SerializeOptions({ type: UserResponseDto, excludeExtraneousValues: true })
   @Get('me')
   @ApiOperation({ summary: 'Retorna os dados do usuário autenticado' })
   @ApiOkResponse({ type: UserResponseDto })

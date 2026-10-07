@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +13,7 @@ import { User } from './entities/user.entity';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { EmailService } from '../email/email.service';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UserService {
@@ -23,8 +25,8 @@ export class UserService {
     private readonly emailService: EmailService,
   ) {}
 
-  async create(data: CreateUserDto) {
-    const existingUser = await this.findByEmail(data.email);
+  async create(dto: CreateUserDto) {
+    const existingUser = await this.findByEmail(dto.email);
 
     if (existingUser) {
       throw new ConflictException('E-mail já cadastrado');
@@ -32,7 +34,7 @@ export class UserService {
 
     const existingCnpj = await this.userRepo.findOne({
       where: {
-        cnpj: data.cnpj,
+        cnpj: dto.cnpj,
       },
     });
 
@@ -43,8 +45,8 @@ export class UserService {
     const token = this.generateEmailVerificationToken();
 
     const user = this.userRepo.create({
-      ...data,
-      password: await bcrypt.hash(data.password, 10),
+      ...dto,
+      password: await bcrypt.hash(dto.password, 10),
       emailVerifiedAt: null,
       emailVerificationTokenHash: this.hashToken(token),
       emailVerificationExpiresAt: this.getVerificationExpiration(24),
@@ -72,6 +74,29 @@ export class UserService {
       message:
         'Cadastro realizado. Consulte seu e-mail para confirmar a conta.',
     };
+  }
+
+  async update(userId: string, dto: UpdateUserDto) {
+    const user = await this.findById(userId);
+
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado.');
+    }
+
+    if (dto.cnpj && dto.cnpj !== user.cnpj) {
+      const existingCnpj = await this.userRepo.findOne({
+        where: {
+          cnpj: dto.cnpj,
+        },
+      });
+
+      if (existingCnpj) {
+        throw new ConflictException('Cnpj já cadastrado');
+      }
+    }
+
+    this.userRepo.merge(user, dto);
+    return this.userRepo.save(user);
   }
 
   async sendVerificationRegisterEmail(
