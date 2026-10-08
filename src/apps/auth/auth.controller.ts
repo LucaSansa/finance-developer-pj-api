@@ -7,6 +7,11 @@ import { CurrentUser } from './decorators/user.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 import { type Response } from 'express';
+import { verifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ConfirmEmailChangeDto } from '../user/dto/confirm-email-change.dto';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -63,5 +68,46 @@ export class AuthController {
     res.clearCookie('refresh_token', { path: '/' });
 
     return this.authService.logout(user.id);
+  }
+
+  @Post('verify-email')
+  @ApiOperation({
+    summary: 'Confirma o e-mail usando o token recebido no link',
+  })
+  verifyEmailRegistered(@Body() dto: verifyEmailDto) {
+    return this.authService.verifyEmailRegistered(dto);
+  }
+
+  @Post('resend-verification-email')
+  @ApiOperation({ summary: 'Reenvia o link de confirmação de e-mail' })
+  resendVerificationRegisterEmail(@Body() dto: ResendVerificationEmailDto) {
+    return this.authService.resendVerificationRegisterEmail(dto);
+  }
+
+  @Post('forgot-password')
+  @ApiOperation({
+    summary:
+      'Envia um e-mail de recuperação de senha seguro para o e-mail solicitado',
+  })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @ApiOperation({
+    summary:
+      'Aplica a redefinição de senha do usuário usando o token de verificação e a nova senha',
+  })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Post('confirm-email-change')
+  @ApiOperation({
+    summary:
+      'Confirma a troca de e-mail usando o token enviado ao novo endereço',
+  })
+  confirmEmailChange(@Body() dto: ConfirmEmailChangeDto) {
+    return this.authService.confirmEmailChange(dto);
   }
 }

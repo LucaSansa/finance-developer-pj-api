@@ -1,18 +1,29 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UserService } from '../user/user.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import * as bcrypt from 'bcrypt';
 import { createHash } from 'crypto';
-import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from './types/jwt-payload.type';
+import { verifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationEmailDto } from './dto/resend-verification-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ConfirmEmailChangeDto } from '../user/dto/confirm-email-change.dto';
+import { UserRepository } from '../user/repositories/user.repository';
+import { JwtSignOptions } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userService: UserService,
+    private readonly userRepository: UserRepository,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -20,20 +31,25 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user.id, user.email);
 
-    await this.userService.saveRefreshTokenHash(user.id, tokens.refresh_token);
+    const refreshTokenHash = createHash('sha256')
+      .update(tokens.refresh_token)
+      .digest('hex');
+
+    await this.userRepository.saveRefreshTokenHash(user.id, refreshTokenHash);
 
     return {
       user: {
         name: user.name,
         cnpj: user.cnpj,
         email: user.email,
+        tax_percentage: user.taxPercentage,
       },
       ...tokens,
     };
   }
 
   async refresh(userId: string, email: string, incomingRefreshToken: string) {
-    const user = await this.userService.findByIdWithRefreshHash(userId);
+    const user = await this.userRepository.findByIdWithRefreshHash(userId);
 
     if (!user?.refreshTokenHash) {
       throw new UnauthorizedException('Refresh token inválido');
@@ -44,20 +60,167 @@ export class AuthService {
       .digest('hex');
 
     if (incomingHash !== user.refreshTokenHash) {
-      await this.userService.clearRefreshTokenHash(userId);
+      await this.userRepository.clearRefreshTokenHash(userId);
       throw new UnauthorizedException('Refresh token invalido ou ja utilizado');
     }
 
     const tokens = await this.generateTokens(userId, email);
 
-    await this.userService.saveRefreshTokenHash(userId, tokens.refresh_token);
+    const refreshTokenHash = createHash('sha256')
+      .update(tokens.refresh_token)
+      .digest('hex');
+
+    await this.userRepository.saveRefreshTokenHash(userId, refreshTokenHash);
 
     return tokens;
   }
 
   async logout(userId: string) {
-    await this.userService.clearRefreshTokenHash(userId);
+    await this.userRepository.clearRefreshTokenHash(userId);
     return { message: 'Logout realizado com sucesso' };
+  }
+
+  async verifyEmailRegistered(dto: verifyEmailDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user =
+      await this.userRepository.findByEmailVerificationTokenHash(tokenHash);
+
+    if (
+      !user ||
+      !user.emailVerificationExpiresAt ||
+      user.emailVerificationExpiresAt < new Date()
+    ) {
+      throw new BadRequestException('Link de confirmação inválido ou expirado');
+    }
+
+    await this.userService.confirmEmail(user.id);
+
+    return {
+      message: 'E-mail confirmado com sucesso. Você já pode fazer login.',
+    };
+  }
+
+  async resendVerificationRegisterEmail(dto: ResendVerificationEmailDto) {
+    const user = await this.userRepository.findByEmailForResendVerification(
+      dto.email,
+    );
+
+    //Evita que o usuários mal intencionados saibam se a conta esta cadastrada, ou se ja foi confirmada
+    if (!user || user.emailVerifiedAt) {
+      return this.resendVerificationRegisterEmailSuccessMessage();
+    }
+
+    const token = this.userService.generateEmailVerificationToken();
+    await this.userService.saveNewVerificationToken(user.id, token);
+    await this.userService.sendVerificationRegisterEmail(user, token);
+
+    return this.resendVerificationRegisterEmailSuccessMessage();
+  }
+
+  private async generateTokens(userId: string, email: string) {
+    const payload: JwtPayload = { sub: userId, email };
+
+    const accessSecret = process.env.JWT_ACCESS_SECRET;
+    const accessExpiresIn = process.env.JWT_ACCESS_EXPIRES_IN;
+    const refreshSecret = process.env.JWT_REFRESH_SECRET;
+    const refreshExpiresIn = process.env.JWT_REFRESH_EXPIRES_IN;
+
+    if (
+      !accessSecret ||
+      !accessExpiresIn ||
+      !refreshSecret ||
+      !refreshExpiresIn
+    ) {
+      throw new Error('Variáveis de ambiente dos tokens não configuradas.');
+    }
+
+    const [access_token, refresh_token] = await Promise.all([
+      this.jwtService.signAsync(payload, {
+        secret: accessSecret,
+        expiresIn: accessExpiresIn as JwtSignOptions['expiresIn'],
+      }),
+      this.jwtService.signAsync(payload, {
+        secret: refreshSecret,
+        expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'],
+      }),
+    ]);
+
+    return { access_token, refresh_token };
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.userService.findByEmail(dto.email);
+
+    //Não vaza a existência do e-mail ao cliente.
+    if (!user) {
+      return this.forgotPasswordSuccessMessage();
+    }
+
+    // Gera um token hexadecimal aleatório e seguro
+    const token = this.userService.generateEmailVerificationToken();
+
+    await this.userService.saveNewPasswordResetToken(user.id, token);
+    await this.userService.sendPasswordResetEmail(user, token);
+
+    return this.forgotPasswordSuccessMessage();
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user =
+      await this.userRepository.findByPasswordResetTokenHash(tokenHash);
+
+    if (
+      !user ||
+      !user.passwordResetExpiresAt ||
+      user.passwordResetExpiresAt < new Date()
+    ) {
+      throw new BadRequestException(
+        'Token de redefinição de senha inválido ou expirado',
+      );
+    }
+
+    // Hash da nova senha com 10 rounds de salt
+    const passwordHash = await bcrypt.hash(dto.password, 10);
+
+    // Atualiza campo e invalida dados anteriores temporários
+    await this.userService.updatePassword(user.id, passwordHash);
+
+    return {
+      message:
+        'Sua senha foi redefinida com sucesso. Você já pode fazer login com as novas credenciais.',
+    };
+  }
+
+  async confirmEmailChange(dto: ConfirmEmailChangeDto) {
+    const tokenHash = this.userService.hashToken(dto.token);
+    const user =
+      await this.userRepository.findByEmailChangeTokenHash(tokenHash);
+    const now = new Date();
+
+    if (
+      !user ||
+      !user.pendingEmail ||
+      !user.emailChangeExpiresAt ||
+      user.emailChangeExpiresAt <= now
+    ) {
+      throw new BadRequestException('Link inválido ou expirado');
+    }
+
+    const updated = await this.userService.applyPendingEmailChange(
+      user.id,
+      tokenHash,
+      user.pendingEmail,
+      now,
+    );
+
+    if (!updated) {
+      throw new BadRequestException('Link inválido, expirado ou já utilizado.');
+    }
+
+    return {
+      message: 'Email da conta atualizado e confirmado com sucesso',
+    };
   }
 
   async validateUser(email: string, password: string) {
@@ -69,23 +232,24 @@ export class AuthService {
 
     if (!isMatch) throw new UnauthorizedException('Credenciais inválidas.');
 
+    if (!user.emailVerifiedAt) {
+      throw new ForbiddenException('Confirme seu e-mail antes de entrar.');
+    }
+
     return user;
   }
 
-  private async generateTokens(userId: string, email: string) {
-    const payload: JwtPayload = { sub: userId, email };
+  private resendVerificationRegisterEmailSuccessMessage() {
+    return {
+      message:
+        'Se existir uma conta pendente para este e-mail, enviamos uma nova confirmação.',
+    };
+  }
 
-    const [access_token, refresh_token] = await Promise.all([
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.getOrThrow('JWT_ACCESS_SECRET'),
-        expiresIn: this.configService.getOrThrow('JWT_ACCESS_EXPIRES_IN'),
-      }),
-      this.jwtService.signAsync(payload, {
-        secret: this.configService.getOrThrow('JWT_REFRESH_SECRET'),
-        expiresIn: this.configService.getOrThrow('JWT_REFRESH_EXPIRES_IN'),
-      }),
-    ]);
-
-    return { access_token, refresh_token };
+  private forgotPasswordSuccessMessage() {
+    return {
+      message:
+        'Se o e-mail informado estiver cadastrado, enviamos um link para redefinição de senha.',
+    };
   }
 }
