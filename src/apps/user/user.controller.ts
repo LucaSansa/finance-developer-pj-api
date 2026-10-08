@@ -24,6 +24,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RequestEmailChangeDto } from './dto/request-email-change.dto';
 import { CreateUserResponseDto } from './dto/create-user-response.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('users')
 @ApiTags('Users')
@@ -66,5 +67,18 @@ export class UserController {
     @Body() dto: RequestEmailChangeDto,
   ) {
     return this.userService.requestEmailChange(user.id, dto.email);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('change-password')
+  @ApiOperation({
+    summary: 'Atuliza a senha do usuário mediante token e senha antiga',
+  })
+  changePassword(
+    @CurrentUser() user: { id: string },
+    @Body()
+    dto: ChangePasswordDto,
+  ) {
+    return this.userService.changePassword(user.id, dto);
   }
 }

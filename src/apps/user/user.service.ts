@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
@@ -15,6 +16,7 @@ import { createHash, randomBytes } from 'crypto';
 import { EmailService } from '../email/email.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { cnpjValidation } from 'src/common/helpers/cnpj-validation';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Injectable()
 export class UserService {
@@ -168,6 +170,41 @@ export class UserService {
       passwordResetSentAt: null,
       refreshTokenHash: null, // Força deslogar sessões antigas por segurança
     });
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.userRepo.findOne({
+      where: { id: userId },
+      select: ['id', 'password'],
+    });
+
+    console.log(user);
+
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado.');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+
+    if (!isMatch) {
+      throw new UnauthorizedException('A senha atual está incorreta');
+    }
+
+    const isSamePassword = await bcrypt.compare(dto.newPassword, user.password);
+
+    if (isSamePassword) {
+      throw new BadRequestException(
+        'A nova senha deve ser diferente da atual.',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 10);
+
+    await this.updatePassword(user.id, passwordHash);
+
+    return {
+      message: 'Sua senha foi redefinida com sucesso.',
+    };
   }
 
   //refatorar
