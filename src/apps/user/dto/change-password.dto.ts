@@ -7,13 +7,11 @@ import {
   MinLength,
 } from 'class-validator';
 
-export class ResetPasswordDto {
-  @ApiProperty({
-    description: 'O token de uso único recebido por e-mail pelo usuário',
-  })
-  @IsNotEmpty({ message: 'O token é obrigatório' })
+export class ChangePasswordDto {
+  @ApiProperty({ description: 'Senha atual' })
   @IsString()
-  token: string;
+  @IsNotEmpty()
+  currentPassword: string;
 
   @ApiProperty({
     description:
@@ -38,5 +36,5 @@ export class ResetPasswordDto {
         'A nova senha deve conter pelo menos uma letra maiúscula, uma minúscula, um número e um símbolo.',
     },
   )
-  password: string;
+  newPassword: string;
 }
