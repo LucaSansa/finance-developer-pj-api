@@ -13,6 +13,18 @@ export class User extends BaseEntity<User> {
   @Column({ unique: true })
   email: string;
 
+  @Column({
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    name: 'tax_percentage',
+    transformer: {
+      to: (value: number) => value,
+      from: (value: string) => parseFloat(value),
+    },
+  })
+  taxPercentage: number;
+
   @Column({ select: false })
   password: string;
 

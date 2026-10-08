@@ -42,6 +42,7 @@ export class AuthService {
         name: user.name,
         cnpj: user.cnpj,
         email: user.email,
+        tax_percentage: user.taxPercentage,
       },
       ...tokens,
     };

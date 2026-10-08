@@ -53,13 +53,13 @@ export class MonthlyClosingController {
   }
 
   @UseGuards(JwtAuthGuard)
-  @Get('find-one/:id')
+  @Get('find-one')
   @ApiOperation({ summary: 'Buca por um mês de fechamento por ID' })
   @ApiParam({
     name: 'id',
     description: 'ID do fechamento mensal',
   })
-  findById(@CurrentUser() user: { id: string }, @Param('id') id: string) {
+  findById(@CurrentUser() user: { id: string }, @Query('id') id: string) {
     return this.monthlyClosingService.findOneById(user.id, id);
   }
 

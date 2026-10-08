@@ -42,6 +42,8 @@ export class OperacionalPjService {
         },
       });
 
+      console.log(monthlyClosing);
+
       if (!monthlyClosing)
         throw new UnauthorizedException('Mês de fechamento não encontrado.');
 
@@ -61,7 +63,8 @@ export class OperacionalPjService {
         accountFee: createMonthlyClosingDto.accountFee ?? 0,
         individualContribution:
           createMonthlyClosingDto.individualContribution ?? 0,
-        totalInvoiceTax: totalInvoice * 0.06,
+        totalInvoiceTax:
+          totalInvoice * (monthlyClosing.user.taxPercentage / 100),
         monthlyClosingId: id,
       });
 
@@ -172,7 +175,8 @@ export class OperacionalPjService {
           await queryRunner.manager.save(Invoice, invoices);
         }
 
-        operacionalPj.totalInvoiceTax = totalInvoices * 0.06;
+        operacionalPj.totalInvoiceTax =
+          totalInvoices * (monthly.user.taxPercentage / 100);
 
         monthly.amountCollected = totalInvoices;
 

@@ -261,7 +261,15 @@ export class UserService {
       where: {
         email,
       },
-      select: ['id', 'name', 'cnpj', 'email', 'password', 'emailVerifiedAt'],
+      select: [
+        'id',
+        'name',
+        'cnpj',
+        'email',
+        'taxPercentage',
+        'password',
+        'emailVerifiedAt',
+      ],
     });
   }
 

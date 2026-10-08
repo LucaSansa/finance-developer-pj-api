@@ -78,7 +78,7 @@ export class MonthlyClosingService {
         const operacionalPjEntity = queryRunner.manager.create(OperacionalPj, {
           accountFee: operacionalPj.accountFee ?? 0,
           individualContribution: operacionalPj.individualContribution ?? 0,
-          totalInvoiceTax: totalInvoices * 0.06,
+          totalInvoiceTax: totalInvoices * (user.taxPercentage / 100),
           monthlyClosingId: monthly.id,
         });
 
@@ -275,7 +275,8 @@ export class MonthlyClosingService {
 
           monthly.amountCollected = totalInvoices;
 
-          operacionalPj.totalInvoiceTax = totalInvoices * 0.06;
+          operacionalPj.totalInvoiceTax =
+            totalInvoices * (user.taxPercentage / 100);
 
           await queryRunner.manager.save(OperacionalPj, operacionalPj);
         }
@@ -381,8 +382,6 @@ export class MonthlyClosingService {
     await queryRunner.startTransaction();
 
     try {
-      // const monthly = await this.MonthlyClosingRepository.findOneById(id);
-
       const monthly = await this.monthlyClosingRepo.findOne({
         where: {
           id,

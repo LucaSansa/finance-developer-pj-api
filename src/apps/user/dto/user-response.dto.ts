@@ -13,4 +13,8 @@ export class UserResponseDto {
   @Expose()
   @ApiProperty({ example: 'contato@empresa.com' })
   email: string;
+
+  @Expose()
+  @ApiProperty({ example: 8 })
+  taxPercentage: number;
 }
