@@ -14,6 +14,7 @@ import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'crypto';
 import { EmailService } from '../email/email.service';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { cnpjValidation } from 'src/common/helpers/cnpj-validation';
 
 @Injectable()
 export class UserService {
@@ -37,6 +38,10 @@ export class UserService {
         cnpj: dto.cnpj,
       },
     });
+
+    if (!cnpjValidation(dto.cnpj)) {
+      throw new ConflictException('Cnpj inválido');
+    }
 
     if (existingCnpj) {
       throw new ConflictException('Cnpj já cadastrado');
@@ -81,6 +86,10 @@ export class UserService {
 
     if (!user) {
       throw new UnauthorizedException('Usuário não encontrado.');
+    }
+
+    if (dto.cnpj && !cnpjValidation(dto.cnpj)) {
+      throw new ConflictException('Cnpj inválido');
     }
 
     if (dto.cnpj && dto.cnpj !== user.cnpj) {

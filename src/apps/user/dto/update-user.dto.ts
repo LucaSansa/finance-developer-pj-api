@@ -7,7 +7,7 @@ export class UpdateUserDto {
   @IsString()
   name?: string;
 
-  @ApiProperty({ example: '12.345.678/0001-99' })
+  @ApiProperty({ example: '12345678000199' })
   @IsOptional()
   @IsString()
   cnpj?: string;
