@@ -14,7 +14,7 @@ export class CreateUserDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ example: '12.345.678/0001-99' })
+  @ApiProperty({ example: '12345678000199' })
   @IsNotEmpty()
   @IsString()
   cnpj: string;
