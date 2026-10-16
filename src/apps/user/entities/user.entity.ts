@@ -22,6 +22,7 @@ export class User extends BaseEntity<User> {
       to: (value: number) => value,
       from: (value: string) => parseFloat(value),
     },
+    nullable: true,
   })
   taxPercentage: number;
 

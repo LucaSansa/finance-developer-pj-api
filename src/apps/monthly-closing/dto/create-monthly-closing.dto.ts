@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsOptional } from 'class-validator';
+import { IsNotEmpty, IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { CreateOperacionalPjDto } from 'src/apps/operacional-pj/dto/create-operacional-pj.dto';
 import { CreatePersonalExpenseDto } from 'src/apps/personal-expenses/dto/create-personal-expense.dto';
 import { IsOnlyDate } from 'src/common/decorators/is-only-date.decorator';
@@ -20,6 +20,13 @@ export class CreateMonthlyClosingDto {
   })
   @IsOptional()
   isClosing?: boolean;
+
+  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(100)
+  taxPercentage?: number;
 
   @ApiPropertyOptional({
     description: 'Informações operacionais do PJ relacionadas ao fechamento',

@@ -1,5 +1,5 @@
-import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 import { IsOnlyDate } from 'src/common/decorators/is-only-date.decorator';
 import { Type } from 'class-transformer';
 import { UpdateOperacionalPjDto } from 'src/apps/operacional-pj/dto/update-operacional-pj.dto';
@@ -20,6 +20,13 @@ export class UpdateMonthlyClosingDto {
   })
   @IsOptional()
   isClosing?: boolean;
+
+  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(100)
+  taxPercentage?: number;
 
   @ApiPropertyOptional({
     type: UpdateOperacionalPjDto,

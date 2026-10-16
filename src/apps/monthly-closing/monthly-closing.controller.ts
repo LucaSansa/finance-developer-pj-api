@@ -18,6 +18,7 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -55,7 +56,7 @@ export class MonthlyClosingController {
   @UseGuards(JwtAuthGuard)
   @Get('find-one')
   @ApiOperation({ summary: 'Buca por um mês de fechamento por ID' })
-  @ApiParam({
+  @ApiQuery({
     name: 'id',
     description: 'ID do fechamento mensal',
   })

@@ -146,7 +146,7 @@ export class UserService {
     token: string,
   ): Promise<void> {
     const frontUrl = process.env.FRONTEND_URL;
-    const resetUrl = `${frontUrl}/redefinir-senha?token=${encodeURIComponent(token)}`;
+    const resetUrl = `${frontUrl}/reset-password?token=${encodeURIComponent(token)}`;
 
     await this.emailService.sendPasswordReset(user.email, user.name, resetUrl);
   }

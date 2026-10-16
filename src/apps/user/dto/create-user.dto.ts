@@ -1,12 +1,9 @@
 import {
   IsEmail,
   IsNotEmpty,
-  IsNumber,
   IsString,
   IsStrongPassword,
-  Max,
   MaxLength,
-  Min,
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -27,12 +24,6 @@ export class CreateUserDto {
   @IsEmail()
   @IsString()
   email: string;
-
-  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(1)
-  @Max(100)
-  taxPercentage: number;
 
   @ApiProperty({
     description:

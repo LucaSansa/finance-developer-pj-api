@@ -51,6 +51,16 @@ export class MonthlyClosingService {
         );
       }
 
+      if (!dto.taxPercentage && !user.taxPercentage) {
+        throw new ConflictException(
+          'Caso você não tenha cadastrado uma porcentagem, você deve inserir uma.',
+        );
+      }
+
+      const userTaxPercentageDto: number = dto.taxPercentage
+        ? dto.taxPercentage
+        : user.taxPercentage;
+
       const totalInvoices =
         dto.operacionalPj?.invoice?.reduce(
           (acc, invoice) => acc + invoice.value,
@@ -78,7 +88,7 @@ export class MonthlyClosingService {
         const operacionalPjEntity = queryRunner.manager.create(OperacionalPj, {
           accountFee: operacionalPj.accountFee ?? 0,
           individualContribution: operacionalPj.individualContribution ?? 0,
-          totalInvoiceTax: totalInvoices * (user.taxPercentage / 100),
+          totalInvoiceTax: totalInvoices * (userTaxPercentageDto / 100),
           monthlyClosingId: monthly.id,
         });
 
@@ -189,6 +199,16 @@ export class MonthlyClosingService {
         monthly.isClosing = dto.isClosing;
       }
 
+      if (!dto.taxPercentage && !user.taxPercentage) {
+        throw new ConflictException(
+          'Caso você não tenha cadastrado uma porcentagem, você deve inserir uma.',
+        );
+      }
+
+      const userTaxPercentageDto: number = dto.taxPercentage
+        ? dto.taxPercentage
+        : user.taxPercentage;
+
       /*
        * =========================================================
        * 2. OPERACIONAL PJ
@@ -276,7 +296,7 @@ export class MonthlyClosingService {
           monthly.amountCollected = totalInvoices;
 
           operacionalPj.totalInvoiceTax =
-            totalInvoices * (user.taxPercentage / 100);
+            totalInvoices * (userTaxPercentageDto / 100);
 
           await queryRunner.manager.save(OperacionalPj, operacionalPj);
         }

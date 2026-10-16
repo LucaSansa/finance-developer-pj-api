@@ -34,7 +34,7 @@ export class LoginDto {
     },
     {
       message:
-        'A nova senha deve conter pelo menos uma letra maiúscula, uma minúscula, um número e um símbolo.',
+        'A senha deve conter pelo menos uma letra maiúscula, uma minúscula, um número e um símbolo.',
     },
   )
   password: string;
