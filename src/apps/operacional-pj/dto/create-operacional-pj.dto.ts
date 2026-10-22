@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, Min } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateInvoiceDto } from 'src/apps/invoice/dto/create-invoice.dto';
 export class CreateOperacionalPjDto {
   @ApiPropertyOptional({
@@ -24,6 +24,13 @@ export class CreateOperacionalPjDto {
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   individualContribution?: number;
+
+  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(100)
+  taxPercentage?: number;
 
   @ApiPropertyOptional({
     description: 'Notas fiscais',

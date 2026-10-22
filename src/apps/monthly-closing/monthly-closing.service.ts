@@ -51,15 +51,14 @@ export class MonthlyClosingService {
         );
       }
 
-      if (!dto.taxPercentage && !user.taxPercentage) {
+      if (dto.taxPercentage == null && user.taxPercentage == null) {
         throw new ConflictException(
           'Caso você não tenha cadastrado uma porcentagem, você deve inserir uma.',
         );
       }
 
-      const userTaxPercentageDto: number = dto.taxPercentage
-        ? dto.taxPercentage
-        : user.taxPercentage;
+      const userTaxPercentageDto: number =
+        dto.taxPercentage ?? user.taxPercentage;
 
       const totalInvoices =
         dto.operacionalPj?.invoice?.reduce(
@@ -168,12 +167,6 @@ export class MonthlyClosingService {
         throw new NotFoundException('Fechamento mensal não encontrado.');
       }
 
-      /*
-       * =========================================================
-       * 1. CAMPOS SIMPLES DO MONTHLY CLOSING
-       * =========================================================
-       */
-
       if (dto.closingDate !== undefined) {
         const monthlyExists = await queryRunner.manager.findOne(
           MonthlyClosing,
@@ -199,28 +192,18 @@ export class MonthlyClosingService {
         monthly.isClosing = dto.isClosing;
       }
 
-      if (!dto.taxPercentage && !user.taxPercentage) {
+      if (dto.taxPercentage == null && user.taxPercentage == null) {
         throw new ConflictException(
           'Caso você não tenha cadastrado uma porcentagem, você deve inserir uma.',
         );
       }
 
-      const userTaxPercentageDto: number = dto.taxPercentage
-        ? dto.taxPercentage
-        : user.taxPercentage;
-
-      /*
-       * =========================================================
-       * 2. OPERACIONAL PJ
-       * =========================================================
-       */
+      const userTaxPercentageDto: number =
+        dto.taxPercentage ?? user.taxPercentage;
 
       if (dto.operacionalPj !== undefined) {
         let operacionalPj = monthly.operacionalPj;
 
-        /*
-         * Se o PJ ainda não existe, criamos.
-         */
         if (!operacionalPj) {
           operacionalPj = queryRunner.manager.create(OperacionalPj, {
             accountFee: dto.operacionalPj.accountFee ?? 0,
@@ -240,10 +223,6 @@ export class MonthlyClosingService {
 
           monthly.operacionalPj = operacionalPj;
         } else {
-          /*
-           * Atualiza somente os campos enviados.
-           */
-
           if (dto.operacionalPj.accountFee !== undefined) {
             operacionalPj.accountFee = dto.operacionalPj.accountFee;
           }
@@ -256,17 +235,12 @@ export class MonthlyClosingService {
           await queryRunner.manager.save(OperacionalPj, operacionalPj);
         }
 
-        /*
-         * =======================================================
-         * 3. INVOICES
-         * =======================================================
-         *
-         * Só entra aqui se "invoice" realmente foi enviado.
-         *
-         * undefined -> não altera invoices
-         * []        -> remove todas
-         * [...]     -> substitui todas
-         */
+        //  * Só entra aqui se "invoice" realmente foi enviado.
+        //  *
+        //  * undefined -> não altera invoices
+        //  * []        -> remove todas
+        //  * [...]     -> substitui todas
+        //  *
 
         if (dto.operacionalPj.invoice !== undefined) {
           await queryRunner.manager.softDelete(Invoice, {
@@ -284,10 +258,6 @@ export class MonthlyClosingService {
             await queryRunner.manager.save(Invoice, invoices);
           }
 
-          /*
-           * Recalcula somente porque as invoices foram alteradas.
-           */
-
           const totalInvoices = dto.operacionalPj.invoice.reduce(
             (acc, invoice) => acc + invoice.value,
             0,
@@ -302,15 +272,10 @@ export class MonthlyClosingService {
         }
       }
 
-      /*
-       * =========================================================
-       * 4. DESPESAS PESSOAIS
-       * =========================================================
-       *
-       * undefined -> não altera
-       * []        -> remove todas
-       * [...]     -> substitui todas
-       */
+      //  * Só entra aqui se "personalExpense" realmente foi enviado.
+      //  * undefined -> não altera
+      //  * []        -> remove todas
+      //  * [...]     -> substitui todas
 
       if (dto.personalExpense !== undefined) {
         await queryRunner.manager.softDelete(PersonalExpense, {
@@ -332,19 +297,9 @@ export class MonthlyClosingService {
         }
       }
 
-      /*
-       * =========================================================
-       * 5. SALVA O MONTHLY CLOSING
-       * =========================================================
-       */
-
       await queryRunner.manager.save(MonthlyClosing, monthly);
 
       await queryRunner.commitTransaction();
-
-      /*
-       * Busca novamente para retornar o estado atualizado.
-       */
 
       return await this.MonthlyClosingRepository.findOne({
         where: {

@@ -178,8 +178,6 @@ export class UserService {
       select: ['id', 'password'],
     });
 
-    console.log(user);
-
     if (!user) {
       throw new UnauthorizedException('Usuário não encontrado.');
     }

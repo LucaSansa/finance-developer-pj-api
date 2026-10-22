@@ -36,7 +36,7 @@ type PaginateRawParams<T extends ObjectLiteral> = {
   page?: number;
   limit?: number;
   mappedFields?: Record<string, string>;
-  transformFields?: Record<string, (val: any) => any>;
+  transformFields?: Record<string, (val: unknown) => unknown>;
 };
 
 /**
@@ -63,7 +63,7 @@ export async function paginateRaw<T extends ObjectLiteral>({
     .getRawAndEntities();
 
   const data = entities.map((entity, index) => {
-    const rawItem = raw[index] ?? {};
+    const rawItem = (raw[index] as Record<string, unknown> | undefined) ?? {};
 
     const extras = Object.entries(mappedFields).reduce(
       (acc, [rawKey, targetKey]) => {
@@ -74,7 +74,7 @@ export async function paginateRaw<T extends ObjectLiteral>({
         }
         return acc;
       },
-      {} as Record<string, any>,
+      {} as Record<string, unknown>,
     );
 
     return {
