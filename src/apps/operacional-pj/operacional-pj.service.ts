@@ -21,11 +21,7 @@ export class OperacionalPjService {
     private readonly dataSource: DataSource,
   ) {}
 
-  async create(
-    id: string,
-    userId: string,
-    createMonthlyClosingDto: CreateOperacionalPjDto,
-  ) {
+  async create(id: string, userId: string, dto: CreateOperacionalPjDto) {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -42,8 +38,6 @@ export class OperacionalPjService {
         },
       });
 
-      console.log(monthlyClosing);
-
       if (!monthlyClosing)
         throw new UnauthorizedException('Mês de fechamento não encontrado.');
 
@@ -53,25 +47,32 @@ export class OperacionalPjService {
         );
       }
 
+      if (
+        dto.taxPercentage == null &&
+        monthlyClosing.user.taxPercentage == null
+      ) {
+        throw new ConflictException(
+          'Caso você não tenha cadastrado uma porcentagem, você deve inserir uma.',
+        );
+      }
+
+      const userTaxPercentageDto: number =
+        dto.taxPercentage ?? monthlyClosing.user.taxPercentage;
+
       const totalInvoice =
-        createMonthlyClosingDto.invoice?.reduce(
-          (acc, item) => acc + item.value,
-          0,
-        ) ?? 0;
+        dto.invoice?.reduce((acc, item) => acc + item.value, 0) ?? 0;
 
       const operacionalPj = queryRunner.manager.create(OperacionalPj, {
-        accountFee: createMonthlyClosingDto.accountFee ?? 0,
-        individualContribution:
-          createMonthlyClosingDto.individualContribution ?? 0,
-        totalInvoiceTax:
-          totalInvoice * (monthlyClosing.user.taxPercentage / 100),
+        accountFee: dto.accountFee ?? 0,
+        individualContribution: dto.individualContribution ?? 0,
+        totalInvoiceTax: totalInvoice * (userTaxPercentageDto / 100),
         monthlyClosingId: id,
       });
 
       await queryRunner.manager.save(OperacionalPj, operacionalPj);
 
-      if (createMonthlyClosingDto.invoice?.length) {
-        const invoices = createMonthlyClosingDto.invoice.map((invoice) =>
+      if (dto.invoice?.length) {
+        const invoices = dto.invoice.map((invoice) =>
           queryRunner.manager.create(Invoice, {
             value: invoice.value,
             operacionalPjId: operacionalPj.id,
@@ -144,7 +145,15 @@ export class OperacionalPjService {
       if (!monthly)
         throw new UnauthorizedException('Fechamento mensal não encontrado.');
 
-      // Atualiza campos do Operacional PJ
+      if (dto.taxPercentage == null && monthly.user.taxPercentage == null) {
+        throw new ConflictException(
+          'Caso você não tenha cadastrado uma porcentagem, você deve inserir uma.',
+        );
+      }
+
+      const userTaxPercentageDto: number =
+        dto.taxPercentage ?? monthly.user.taxPercentage;
+
       if (dto.accountFee !== undefined) {
         operacionalPj.accountFee = dto.accountFee;
       }
@@ -153,7 +162,6 @@ export class OperacionalPjService {
         operacionalPj.individualContribution = dto.individualContribution;
       }
 
-      // Atualiza invoices somente se invoice foi enviada
       if (dto.invoice !== undefined) {
         await queryRunner.manager.softDelete(Invoice, {
           operacionalPjId: operacionalPj.id,
@@ -176,7 +184,7 @@ export class OperacionalPjService {
         }
 
         operacionalPj.totalInvoiceTax =
-          totalInvoices * (monthly.user.taxPercentage / 100);
+          totalInvoices * (userTaxPercentageDto / 100);
 
         monthly.amountCollected = totalInvoices;
 
@@ -185,7 +193,6 @@ export class OperacionalPjService {
         });
       }
 
-      // Salva o Operacional PJ uma única vez
       await queryRunner.manager.save(OperacionalPj, operacionalPj);
 
       await queryRunner.commitTransaction();
@@ -223,7 +230,6 @@ export class OperacionalPjService {
           id: operacionalPj.monthlyClosingId,
         },
         relations: {
-          // operacionalPj: true,
           user: true,
         },
       });

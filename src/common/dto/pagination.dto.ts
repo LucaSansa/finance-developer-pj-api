@@ -9,7 +9,10 @@ export class PaginationDto {
   @Type(() => Number)
   page?: number;
 
-  @ApiPropertyOptional({ example: 10, description: 'Quantidade de itens por página' })
+  @ApiPropertyOptional({
+    example: 10,
+    description: 'Quantidade de itens por página',
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)

@@ -21,10 +21,10 @@ export class CreateMonthlyClosingDto {
   @IsOptional()
   isClosing?: boolean;
 
-  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @ApiProperty({ example: 6, minimum: 0, maximum: 100 })
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(1)
+  @Min(0)
   @Max(100)
   taxPercentage?: number;
 

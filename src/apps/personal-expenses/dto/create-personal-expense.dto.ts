@@ -37,10 +37,6 @@ export class CreatePersonalExpenseDto {
   @IsPositive()
   value: number;
 
-  // @IsString()
-  // @IsNotEmpty()
-  // monthlyClosingId: string;
-
   @ApiProperty({
     description: 'ID do tipo de despesa',
     example: 'uuid-expense-type-123',

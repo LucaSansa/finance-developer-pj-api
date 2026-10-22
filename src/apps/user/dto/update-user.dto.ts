@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString } from 'class-validator';
+import { IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class UpdateUserDto {
   @ApiProperty({ example: 'Jhon Due' })
@@ -11,4 +11,11 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   cnpj?: string;
+
+  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(1)
+  @Max(100)
+  taxPercentage?: number;
 }

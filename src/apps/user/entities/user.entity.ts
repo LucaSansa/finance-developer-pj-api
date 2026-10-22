@@ -19,8 +19,9 @@ export class User extends BaseEntity<User> {
     scale: 2,
     name: 'tax_percentage',
     transformer: {
-      to: (value: number) => value,
-      from: (value: string) => parseFloat(value),
+      to: (value: number | null) => value,
+      from: (value: string | null) =>
+        value == null ? null : parseFloat(value),
     },
     nullable: true,
   })
