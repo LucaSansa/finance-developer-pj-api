@@ -1,5 +1,14 @@
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { CreateOperacionalPjDto } from 'src/apps/operacional-pj/dto/create-operacional-pj.dto';
 import { CreatePersonalExpenseDto } from 'src/apps/personal-expenses/dto/create-personal-expense.dto';
 import { IsOnlyDate } from 'src/common/decorators/is-only-date.decorator';
@@ -19,10 +28,12 @@ export class CreateMonthlyClosingDto {
     example: true,
   })
   @IsOptional()
+  @IsBoolean()
   isClosing?: boolean;
 
-  @ApiProperty({ example: 6, minimum: 0, maximum: 100 })
+  @ApiPropertyOptional({ example: 6, minimum: 0, maximum: 100 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
@@ -34,6 +45,7 @@ export class CreateMonthlyClosingDto {
   })
   @IsOptional()
   @Type(() => CreateOperacionalPjDto)
+  @ValidateNested()
   operacionalPj?: CreateOperacionalPjDto;
 
   @ApiPropertyOptional({
@@ -41,6 +53,8 @@ export class CreateMonthlyClosingDto {
     type: [CreatePersonalExpenseDto],
   })
   @IsOptional()
+  @IsArray()
   @Type(() => CreatePersonalExpenseDto)
+  @ValidateNested({ each: true })
   personalExpense?: CreatePersonalExpenseDto[];
 }

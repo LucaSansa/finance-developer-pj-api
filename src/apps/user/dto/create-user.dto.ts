@@ -4,6 +4,7 @@ import {
   IsString,
   IsStrongPassword,
   MaxLength,
+  Matches,
   MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
@@ -14,9 +15,12 @@ export class CreateUserDto {
   @IsString()
   name: string;
 
-  @ApiProperty({ example: '12345678000199' })
+  @ApiProperty({ example: '11222333000181' })
   @IsNotEmpty()
   @IsString()
+  @Matches(/^\d{14}$/, {
+    message: 'O CNPJ deve conter exatamente 14 dígitos numéricos.',
+  })
   cnpj: string;
 
   @ApiProperty({ example: 'teste@teste.com' })

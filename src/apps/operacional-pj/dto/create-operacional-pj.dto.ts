@@ -1,6 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, Max, Min } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { CreateInvoiceDto } from 'src/apps/invoice/dto/create-invoice.dto';
 export class CreateOperacionalPjDto {
   @ApiPropertyOptional({
@@ -25,8 +32,9 @@ export class CreateOperacionalPjDto {
   @Min(0)
   individualContribution?: number;
 
-  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({ example: 6, minimum: 1, maximum: 100 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(1)
   @Max(100)
@@ -37,6 +45,8 @@ export class CreateOperacionalPjDto {
     type: [CreateInvoiceDto],
   })
   @IsOptional()
+  @IsArray()
   @Type(() => CreateInvoiceDto)
+  @ValidateNested({ each: true })
   invoice?: CreateInvoiceDto[];
 }

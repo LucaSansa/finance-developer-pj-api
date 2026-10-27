@@ -6,22 +6,24 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
+  ValidateIf,
 } from 'class-validator';
 
 export class UpdatePersonalExpenseDto {
   @ApiPropertyOptional()
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   @IsNotEmpty()
   name?: string;
 
   @ApiPropertyOptional()
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   description?: string;
 
   @ApiPropertyOptional()
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
@@ -31,5 +33,6 @@ export class UpdatePersonalExpenseDto {
   @IsOptional()
   @IsString()
   @IsNotEmpty()
+  @IsUUID()
   expenseTypeId?: string;
 }

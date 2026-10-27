@@ -7,7 +7,7 @@ export class UserResponseDto {
   name: string;
 
   @Expose()
-  @ApiProperty({ example: '12.345.678/0001-99' })
+  @ApiProperty({ example: '11222333000181' })
   cnpj: string;
 
   @Expose()
