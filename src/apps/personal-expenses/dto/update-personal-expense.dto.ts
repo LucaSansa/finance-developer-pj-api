@@ -1,41 +1,38 @@
-import { Type } from 'class-transformer';
-import { IsString, IsOptional, IsNumber, IsPositive } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsPositive,
+  IsString,
+  IsUUID,
+  ValidateIf,
+} from 'class-validator';
 
 export class UpdatePersonalExpenseDto {
-  @ApiPropertyOptional({
-    description: 'Nome da despesa pessoal',
-    example: 'Aluguel escritório',
-  })
-  @IsOptional()
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsString()
+  @IsNotEmpty()
   name?: string;
 
-  @ApiPropertyOptional({
-    description: 'Descrição da despesa',
-    example: 'Sala comercial centro',
-  })
-  @IsOptional()
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({
-    description: 'Valor da despesa',
-    example: 1200.5,
-  })
+  @ApiPropertyOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @Type(() => Number)
-  @IsNumber({
-    maxDecimalPlaces: 2,
-  })
-  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @IsPositive()
   value?: number;
 
-  @ApiPropertyOptional({
-    description: 'ID do tipo de despesa',
-    example: 'uuid-expense-type-123',
-  })
-  @IsString()
+  @ApiPropertyOptional()
   @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  @IsUUID()
   expenseTypeId?: string;
 }

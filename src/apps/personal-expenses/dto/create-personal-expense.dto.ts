@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -37,19 +38,12 @@ export class CreatePersonalExpenseDto {
   @IsPositive()
   value: number;
 
-  // @ApiProperty({
-  //   description: 'ID do fechamento mensal associado',
-  //   example: 'uuid-fechamento-123',
-  // })
-  @IsString()
-  @IsNotEmpty()
-  monthlyClosingId: string;
-
   @ApiProperty({
     description: 'ID do tipo de despesa',
-    example: 'uuid-expense-type-123',
+    example: '550e8400-e29b-41d4-a716-446655440000',
   })
   @IsString()
   @IsNotEmpty()
+  @IsUUID()
   expenseTypeId: string;
 }

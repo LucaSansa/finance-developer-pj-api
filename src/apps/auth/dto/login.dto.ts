@@ -1,14 +1,41 @@
-import { IsEmail, IsNotEmpty, IsString } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  IsStrongPassword,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class LoginDto {
-  @ApiProperty({ example: 'user@example.com' })
+  @ApiProperty({ example: 'teste@teste.com' })
   @IsNotEmpty()
   @IsEmail()
   email: string;
 
-  @ApiProperty({ example: 'strongPassword123' })
-  @IsNotEmpty()
-  @IsString()
+  @ApiProperty({
+    description:
+      'Senha da conta: de 8 a 12 caracteres, com maiúscula, minúscula, número e símbolo',
+    example: 'Senha@123',
+    minLength: 8,
+    maxLength: 12,
+  })
+  @IsString({ message: 'A nova senha deve ser um texto.' })
+  @MinLength(8, { message: 'A nova senha deve ter no mínimo 8 caracteres.' })
+  @MaxLength(12, { message: 'A nova senha deve ter no máximo 12 caracteres.' })
+  @IsStrongPassword(
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 1,
+    },
+    {
+      message:
+        'A senha deve conter pelo menos uma letra maiúscula, uma minúscula, um número e um símbolo.',
+    },
+  )
   password: string;
 }

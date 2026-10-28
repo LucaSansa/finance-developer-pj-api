@@ -6,6 +6,7 @@ import { ConfigModule } from '@nestjs/config';
 import { MonthlyClosingModule } from './apps/monthly-closing/monthly-closing.module';
 import { OperacionalPjModule } from './apps/operacional-pj/operacional-pj.module';
 import { PersonalExpensesModule } from './apps/personal-expenses/personal-expenses.module';
+import { InvoiceModule } from './apps/invoice/invoice.module';
 
 const migrationsPath = 'dist/migrations/*{.ts,.js}';
 
@@ -31,6 +32,7 @@ const migrationsPath = 'dist/migrations/*{.ts,.js}';
     AuthModule,
     MonthlyClosingModule,
     OperacionalPjModule,
+    InvoiceModule,
     PersonalExpensesModule,
   ],
 })

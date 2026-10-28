@@ -13,9 +13,25 @@ export function IsOnlyDate(validationOptions?: ValidationOptions) {
         ...validationOptions,
       },
       validator: {
-        validate(value: any) {
-          const regex = isOnlyDateValidation.regex;
-          return typeof value === 'string' && regex.test(value);
+        validate(value: unknown) {
+          if (typeof value !== 'string') {
+            return false;
+          }
+
+          const match = isOnlyDateValidation.regex.exec(value);
+          if (!match) {
+            return false;
+          }
+
+          if (Number(value.slice(0, 4)) < 1) {
+            return false;
+          }
+
+          const date = new Date(`${value}T00:00:00.000Z`);
+          return (
+            !Number.isNaN(date.getTime()) &&
+            date.toISOString().slice(0, 10) === value
+          );
         },
       },
     });

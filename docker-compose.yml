@@ -30,6 +30,14 @@ services:
       db:
         condition: service_healthy
 
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
   api:
     build: .
     container_name: nest_api
