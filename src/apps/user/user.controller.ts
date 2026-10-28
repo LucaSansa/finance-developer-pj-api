@@ -55,7 +55,7 @@ export class UserController {
   @Get('me')
   @ApiOperation({ summary: 'Retorna os dados do usuário autenticado' })
   @ApiOkResponse({ type: UserResponseDto })
-  findByMe(@CurrentUser() user: { id: string; email: string }) {
+  findByMe(@CurrentUser() user: { id: string }) {
     return this.userService.findById(user.id);
   }
 
