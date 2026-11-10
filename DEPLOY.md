@@ -1,4 +1,4 @@
-# Guia para colocar a API no ar
+# Guia de deploy da API na AWS Free Tier
 
 Este guia explica, passo a passo, como publicar esta API em um servidor e
 configurar atualizações automáticas quando houver um novo commit na branch
@@ -6,9 +6,9 @@ configurar atualizações automáticas quando houver um novo commit na branch
 com servidores.
 
 > **Antes de começar:** leia o guia inteiro, principalmente as partes sobre o
-> banco de dados e os avisos de segurança. A publicação torna a API acessível
-> pela internet e pode gerar custos. Este guia é um caminho inicial para uma
-> aplicação pequena, não uma garantia de segurança ou disponibilidade.
+> banco de dados e os avisos de segurança. Este guia configura um ambiente
+> experimental: o Free Tier é temporário e pode encerrar o servidor e seus
+> dados. Não use dados reais antes de testar backups e planejar a continuidade.
 
 ## 1. O que vamos construir
 
@@ -44,19 +44,17 @@ para que seus links de confirmação e recuperação funcionem.
 
 1. Uma conta no GitHub com acesso de administrador ao repositório.
 2. Um servidor virtual (**VPS**) com Ubuntu 24.04 LTS e endereço IPv4 público.
-3. Um domínio, como `seudominio.com.br`, com acesso à configuração de DNS.
-4. Um serviço de e-mail transacional com SMTP e remetente/domínio verificado.
+3. Um endereço público para a API: o DNS público do EC2 para testes, ou um
+   domínio próprio com acesso à configuração de DNS.
+4. Um serviço de e-mail transacional com SMTP e remetente verificado.
 5. Um computador com Git e SSH. Os comandos locais abaixo usam Linux ou macOS;
    no Windows, use WSL com Ubuntu ou adapte ao seu terminal.
-6. Um frontend publicado em HTTPS, preferencialmente em
-   `https://app.seudominio.com.br`.
+6. Para testar os fluxos completos pelo navegador, um frontend publicado em
+   HTTPS. Ele não é necessário para verificar DNS ou iniciar a API.
 
-**Custos:** normalmente há cobrança recorrente pelo VPS, domínio, armazenamento
-de backups e, conforme o volume, pelo serviço de e-mail. Consulte preços,
-limites, impostos e política de cobrança dos fornecedores antes de contratar.
-Um VPS com 2 GB de RAM e 1 CPU pode servir para testes de um projeto pequeno,
-mas não é garantia de desempenho; compilação Docker, tráfego e PostgreSQL
-podem exigir mais memória, disco ou recursos.
+**Custos:** o Free Tier não inclui automaticamente domínio e todos os
+serviços. Consulte as condições da sua conta, de cada recurso e do plano
+antes de criar ou contratar qualquer coisa, como explicado na seção 2.
 
 ### Antes de digitar comandos
 
@@ -72,27 +70,288 @@ podem exigir mais memória, disco ou recursos.
 
 ## 2. Escolha um VPS e um domínio
 
-Você pode escolher qualquer fornecedor de VPS que ofereça Ubuntu 24.04 LTS,
-IPv4 público, acesso SSH e firewall de rede. DigitalOcean, Hetzner e AWS
-Lightsail são exemplos, não recomendações obrigatórias. As telas e os preços
-mudam; procure por **Create server**, **Droplet**, **Instance** ou equivalente.
+Vamos usar a **Amazon Web Services (AWS)** e o serviço **Amazon EC2**. EC2 é
+um servidor virtual: nele instalaremos Docker e executaremos a API e o banco.
+Não contrate Lightsail nem RDS para seguir este exemplo.
 
-Ao contratar:
+### Entenda o Free Tier antes de abrir a conta
 
-1. Escolha Ubuntu 24.04 LTS, arquitetura `amd64` ou `arm64`, um plano adequado
-   e uma região próxima dos seus usuários.
-2. Crie ou informe uma chave SSH para acesso administrativo. Prefira chave a
-   senha; siga o painel do fornecedor para cadastrar a chave pública.
-3. Anote o **IPv4 público**. Configure o firewall do fornecedor para permitir
-   TCP 22, 80 e 443; mantenha as demais portas de entrada fechadas. Se possível,
-   limite a porta 22 ao seu IP e aos IPs necessários para automação. GitHub
-   Actions hospedado pelo GitHub usa endereços variáveis; uma regra restrita ao
-   seu IP pode impedir o deploy automático.
-4. Ative autenticação em dois fatores na conta do fornecedor e no GitHub.
-5. Confira se o plano inclui backups e se eles podem ser restaurados. Mesmo
-   assim, faça também os backups de banco descritos adiante.
+As regras abaixo foram consultadas em **10/11/2026** e podem mudar. Consulte
+o [Free Tier oficial](https://aws.amazon.com/free/) e as condições da sua conta.
 
-No painel DNS de quem administra seu domínio, crie:
+- Para novos clientes que criaram a conta em ou após 15/07/2025, a AWS informa
+  US$ 100 em créditos iniciais e até US$ 100 adicionais por atividades
+  qualificadas. Esses valores são **créditos de uso elegível**, não dinheiro
+  disponível para saque e não garantem seis meses de execução.
+- No **Free plan**, a AWS informa que não há cobrança enquanto você permanece
+  no plano gratuito, mas o plano termina ao acabar o crédito ou após seis
+  meses, o que ocorrer primeiro. A conta é fechada e o acesso aos recursos
+  interrompido. A AWS informa retenção por 90 dias antes da exclusão definitiva;
+  confira as regras vigentes e planeje recuperar ou migrar seus dados **antes**
+  do vencimento. O acesso a alguns recursos pode ser limitado.
+- No **Paid plan**, podem existir créditos elegíveis, mas valores não cobertos
+  podem gerar cobrança. Contas antigas seguem regras diferentes. Não presuma
+  que uma conta já existente tem créditos ou que `Free tier eligible`
+  signifique uso ilimitado. Alguns produtos ou ações podem exigir o plano pago
+  ou resultar em alteração de plano: confira a tela antes de confirmar.
+- EC2, disco EBS, IPv4 público, tráfego, snapshots e outros serviços podem
+  consumir créditos ou gerar custos conforme o plano. A AWS cobra por IPv4
+  público, inclusive Elastic IP sem uso. Domínio próprio e serviço de SMTP
+  podem ser pagos e não são automaticamente oferecidos gratuitamente.
+
+Leia também [planos Free e Paid](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html)
+e [regras do EC2 Free Tier](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html).
+**Este guia não garante custo zero nem disponibilidade permanente.** Antes de
+escolher o plano pago, veja o custo projetado e decida se aceita a cobrança.
+
+Vamos criar **uma instância EC2**, que é o computador virtual onde rodarão
+Docker, API e PostgreSQL. Neste exemplo não criaremos um banco RDS separado.
+Os nomes das telas podem mudar e aparecer em inglês ou português.
+
+### 2.1 Crie a conta e entenda a cobrança
+
+1. Acesse [aws.amazon.com/free](https://aws.amazon.com/free/), escolha criar
+   uma conta e siga o cadastro. A AWS pode solicitar cartão, dados de
+   faturamento e confirmação de identidade. Se aparecer a escolha de plano,
+   selecione **Free plan**, leia o prazo e as limitações e confirme apenas se
+   concordar. Se você já tem conta, entre nela e confira seu plano e
+   elegibilidade no Billing: não suponha que poderá criar uma nova conta grátis.
+   Espere a ativação antes de criar a instância.
+2. Proteja a conta com uma senha única e **MFA** (autenticação em dois
+   fatores). Use o usuário raiz apenas para as tarefas que o exigem; para o
+   dia a dia, configure acesso administrativo adequado conforme as
+   [orientações de segurança da AWS](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html).
+   Ative também o 2FA no GitHub.
+3. Antes de contratar, consulte o preço **na região escolhida** para instância
+   EC2 sob demanda, armazenamento EBS, IPv4 público, tráfego, snapshots e
+   eventuais serviços extras. Consulte também domínio e SMTP, que podem ser
+   cobrados por outros fornecedores. Preços, impostos e elegibilidade a
+   créditos ou oferta gratuita variam: não suponha que o projeto será grátis.
+   Use a [calculadora de preços da AWS](https://calculator.aws/) e confira o
+   orçamento antes de clicar em criar.
+4. No console AWS, abra **Billing and Cost Management** e procure **Free Tier**
+   e **Credits**. Anote o plano, saldo, validade e uso elegível exibidos. Volte
+   a essas páginas regularmente: os valores não são atualizados em tempo real.
+   Crie um lembrete para verificar antes dos seis meses e antes de o crédito
+   acabar. Depois pesquise
+   **Budgets**. Escolha **Create budget**, crie um orçamento mensal de custo
+   e informe um limite e um e-mail para alertas. Verifique a confirmação
+   solicitada pela AWS, se houver. **O alerta não limita a cobrança nem desliga
+   o servidor automaticamente**; valores podem demorar a aparecer. Acompanhe
+   também a página de custos.
+
+### 2.2 Abra a criação do servidor
+
+1. Entre no [console da AWS](https://console.aws.amazon.com/).
+2. No canto superior, escolha uma **região**. Uma região próxima dos usuários
+   pode reduzir a latência, mas pode ter preço diferente. Por exemplo,
+   **São Paulo (`sa-east-1`)** é uma opção; confira preços e disponibilidade
+   antes de escolher. Anote a região e permaneça nela ao procurar seus recursos:
+   uma instância criada em outra região não aparece na lista atual.
+3. Na caixa de pesquisa superior, digite `EC2` e abra **EC2**.
+4. No menu lateral, abra **Instances / Instâncias** e clique em
+   **Launch instances / Executar instâncias**.
+
+### 2.3 Preencha a tela de criação
+
+Preencha os campos abaixo. Não clique em **Launch instance** até conferir
+também rede, armazenamento e custo.
+
+1. **Name and tags / Nome:** digite `finance-api`. Esse nome é apenas uma
+   etiqueta para você encontrar o servidor no painel.
+2. **Application and OS Images / Imagem:** escolha **Ubuntu** e procure uma
+   imagem oficial **Ubuntu Server 24.04 LTS**, publicada pela Canonical, com
+   arquitetura **64-bit (x86)**. Confira o nome da imagem e o fornecedor
+   antes de selecionar; não escolha uma imagem paga de terceiros por engano.
+3. **Instance type / Tipo de instância:** como ponto de partida para um
+   experimento pequeno, procure `t3.small`, que tem 2 GiB de memória, e
+   confira se o console marca o tipo como **Free tier eligible** para a sua
+   conta e região. Para contas criadas a partir de 15/07/2025, a documentação
+   lista esse tipo entre os elegíveis; contas anteriores têm regras diferentes.
+   Se não estiver disponível ou elegível, pare e avalie custo e alternativas.
+   A família `t3` tem créditos de CPU e, dependendo do modo e do uso, pode
+   gerar cobranças adicionais. Esse tamanho não garante desempenho: a
+   compilação Docker e o banco compartilham memória e disco. Se necessário,
+   aumente o tamanho conforme a documentação AWS.
+4. **Key pair / Par de chaves:** clique em **Create new key pair / Criar novo
+   par de chaves**. Dê o nome `finance-aws`, escolha tipo `RSA` e formato
+   `.pem` para usar SSH no Linux, macOS ou WSL. Confirme e salve o arquivo
+   `finance-aws.pem` baixado **no seu computador**. Ele é a chave privada:
+   não o envie ao GitHub nem compartilhe com outras pessoas. Se perdê-lo,
+   não é possível baixar o mesmo arquivo novamente; será necessário um
+   procedimento de recuperação de acesso. Não escolha continuar sem chave.
+
+### 2.4 Configure rede e portas
+
+Na mesma tela de criação:
+
+1. Em **Network settings / Configurações de rede**, clique em **Edit / Editar**.
+   Escolha a VPC padrão e uma subnet pública com rota de saída para um
+   *Internet Gateway*. Se sua conta não tiver VPC/subnet padrão ou você não
+   souber se a subnet é pública, consulte a documentação da AWS ou peça ajuda
+   antes de continuar. Habilite **Auto-assign public IP / Atribuir IP público
+   automaticamente**.
+2. Crie um **security group / grupo de segurança** novo, por exemplo
+   `finance-api-sg`. Ele funciona como um porteiro que decide quais conexões
+   externas entram no servidor. Configure as regras de **entrada**:
+
+   | Tipo | Porta TCP | Origem | Para quê |
+   | --- | --- | --- | --- |
+   | SSH | `22` | Seu IPv4 público seguido de `/32` | Acesso administrativo da sua conexão |
+   | HTTP | `80` | `0.0.0.0/0` | Emissão do certificado e redirecionamento para HTTPS |
+   | HTTPS | `443` | `0.0.0.0/0` | Acesso público seguro à API |
+
+   Para preencher a origem SSH, no terminal do **seu computador**, execute:
+
+   ```bash
+   curl -4 https://checkip.amazonaws.com
+   ```
+
+   O resultado é o IPv4 público da sua conexão, por exemplo `123.45.67.89`.
+   Na regra SSH, escolha **Personalizado / Custom** como tipo de origem e
+   digite o endereço retornado seguido de `/32`, por exemplo
+   `123.45.67.89/32`. Substitua o exemplo pelo seu endereço real.
+
+   A opção **My IP / Meu IP** pode identificar um endereço IPv6 em vez do
+   IPv4, dependendo da sua conexão. Como este guia acessa a instância pelo
+   IPv4 público, confira a origem gerada: se ela for IPv6, remova-a e use o
+   IPv4 com `/32` conforme explicado acima. Em IPv4, `/32` limita a regra a
+   um endereço; em IPv6, `/32` representa uma faixa ampla, não um único
+   endereço.
+
+   `0.0.0.0/0` significa qualquer endereço IPv4. Para SSH, **não** selecione
+   essa origem na configuração inicial. Se mudar de rede ou seu IPv4 mudar,
+   repita o comando e atualize a origem SSH no grupo de segurança. Essa regra
+   é adicional ao firewall do próprio Ubuntu, configurado depois.
+3. Não crie regras de entrada para `3000`, `5432`, `5050`, `1025` ou `8025`.
+   Mantenha a saída necessária para acessar GitHub, baixar imagens, obter
+   certificados e enviar SMTP; o padrão costuma permitir saída. Não associe
+   privilégios AWS extras à instância sem necessidade.
+
+> **Importante para o deploy automático:** na seção 10, o GitHub Actions
+> hospedado pelo GitHub precisará entrar por SSH. Seus IPs de saída variam,
+> então somente o IPv4 da sua conexão não basta. A seção 10 explica esse
+> impasse; não abra
+> a porta 22 para todo o mundo sem compreender e aceitar o risco.
+
+### 2.5 Configure o disco e crie
+
+1. Em **Configure storage / Configurar armazenamento**, localize o volume
+   raiz, que é o disco principal do servidor. Altere o tamanho de `8` para
+   **20 GiB** e mantenha o tipo **gp3**. Não clique em **Adicionar novo
+   volume**; um volume é suficiente para começar.
+2. Clique em **Avançado** no canto da seção de armazenamento e confira os
+   campos do volume raiz:
+
+   - **Criptografado:** escolha **Criptografado**. Em **Chave do KMS**,
+     selecione a chave padrão da AWS, geralmente `aws/ebs`, se disponível.
+     Se não encontrar essa opção, confira as alternativas e seus custos antes
+     de continuar.
+   - **IOPS:** mantenha `3000`.
+   - **Taxa de transferência:** mantenha `125`.
+   - **Taxa de inicialização de volume:** deixe em branco; preencher esse
+     campo pode gerar cobranças adicionais.
+   - **Excluir no encerramento:** se estiver **Sim**, encerrar definitivamente
+     a instância poderá apagar o volume raiz e seus dados. **Não** preserva
+     esse volume após o encerramento, mas ele pode continuar consumindo
+     créditos ou gerando custos. Escolha conscientemente; o volume preservado
+     não substitui um backup separado.
+
+   Em **Sistemas de arquivos**, mantenha **Nenhum**. Não é necessário
+   adicionar S3, EFS ou FSx para este exemplo.
+3. Confira se o volume aparece como criptografado, com **20 GiB** e tipo
+   **gp3**. Mesmo que o console indique que o tipo é qualificado para o nível
+   gratuito, isso não garante custo zero: confira os limites, créditos e
+   elegibilidade da sua conta. Aumente o espaço conforme o uso e o preço;
+   20 GiB não garante capacidade suficiente.
+4. Se aparecer uma mensagem de que a instância não permite volumes de
+   **armazenamento de instâncias** da AMI, ela se refere a outro tipo de
+   armazenamento; o volume EBS `gp3` configurado acima continua sendo o disco
+   raiz.
+5. Não altere outras opções avançadas sem entender seus efeitos. Em particular,
+   não cole senhas ou chaves em **User data / Dados do usuário**.
+6. Revise imagem, tipo, chave, rede, regras e armazenamento. Depois de
+   conferir os custos, clique em **Launch instance / Executar instância**.
+7. Volte a **Instances**, selecione `finance-api` e espere o estado
+   **Running / Em execução** e as verificações de estado passarem. Isso pode
+   levar alguns minutos. Anote o **Instance ID**, como `i-...`.
+
+O disco EBS não é um backup independente. Conforme a configuração, o volume
+raiz pode ser apagado ao **terminar** a instância. Não clique em
+**Terminate / Encerrar** pensando que isso é apenas desligar o servidor.
+
+### 2.6 Reserve um IPv4 fixo
+
+O IPv4 público atribuído automaticamente à instância pode mudar após
+pará-la e iniciá-la. Para manter o DNS apontando para o mesmo endereço, vamos
+associar um **Elastic IP**. **A AWS cobra por IPv4 público, inclusive por
+Elastic IP alocado e sem uso**; confira o preço antes de prosseguir.
+
+No console EC2, na mesma região da instância:
+
+1. No menu lateral, vá em **Network & Security / Rede e segurança → Elastic
+   IPs / IPs elásticos**.
+2. Clique em **Allocate Elastic IP address / Alocar endereço IP elástico**.
+   Use o pool de endereços da Amazon e a mesma região/grupo de rede da instância.
+   Confirme em **Allocate**.
+3. Selecione o IP criado e escolha **Actions → Associate Elastic IP address**.
+   Em **Resource type**, escolha **Instance**; em **Instance**, escolha
+   `finance-api` pelo ID anotado. Confirme em **Associate**.
+4. Volte aos detalhes da instância e anote o novo **Public IPv4 address**.
+   Esse será `SEU_IP` nos comandos do guia. Ao associar o Elastic IP, o IPv4
+   automático anterior é substituído; use somente o novo.
+
+Se decidir desistir, desassociar o IP não encerra a cobrança: é preciso
+**liberá-lo** no painel. Mais detalhes estão na
+[documentação de Elastic IP da AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/working-with-eips.html).
+
+### 2.7 Domínio e DNS
+
+**Você não precisa comprar um domínio para começar.** Escolha uma das opções:
+
+#### Opção A — Testar com o DNS público do EC2
+
+1. No console AWS, entre em **EC2 → Instâncias**, selecione `finance-api` e
+   abra **Detalhes**.
+2. Copie o valor de **DNS pública / Public DNS (IPv4)**. Ele se parece com
+   `ec2-12-34-56-78.us-east-2.compute.amazonaws.com`. Não copie o **DNS
+   privado**. Esse nome é fornecido pela AWS; não é um domínio registrado em
+   seu nome.
+3. No **computador**, abra o terminal e execute o comando abaixo, trocando o
+   exemplo pelo DNS copiado, sem `https://`:
+
+   ```bash
+   nslookup ec2-12-34-56-78.us-east-2.compute.amazonaws.com
+   ```
+
+4. Na resposta, procure o **Address** associado ao nome consultado. Ele deve
+   corresponder ao **Endereço IPv4 público** da instância mostrado pela AWS.
+   O primeiro `Address` da saída pode ser o endereço do seu servidor DNS,
+   como `127.0.0.53`; esse não é o endereço da instância.
+
+Esse teste verifica somente se o nome é traduzido para o endereço correto.
+Ainda não verifica a API, a porta 443 ou o certificado HTTPS: esses testes
+serão feitos na seção 8, depois que os serviços estiverem rodando. Se
+`nslookup` não estiver instalado, use `dig +short SEU_DNS_PUBLICO` ou instale
+uma ferramenta de consulta DNS.
+
+Se o campo de DNS público estiver vazio, confira se a instância tem IPv4
+público e se as opções de DNS da VPC estão habilitadas; consulte a
+[documentação da AWS](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns-viewing.html).
+Quando um Elastic IP é associado, o DNS público pode mudar: copie novamente
+o valor exibido após a associação e use esse nome nas próximas seções.
+
+Anote esse nome como **SEU_DNS_PUBLICO**. Nas seções 6 e 8, siga as instruções
+de teste sem domínio. HTTPS com esse nome depende da emissão de um certificado
+por uma autoridade certificadora; se não funcionar, siga a alternativa de
+túnel SSH na seção 8. Não coloque dados reais em um teste sem HTTPS válido.
+
+#### Opção B — Usar um domínio próprio
+
+Se você quiser usar um domínio próprio, registre um com um fornecedor de sua escolha
+e verifique o preço de compra e renovação. Não é obrigatório comprar o domínio
+ou hospedar o DNS na AWS. No painel do fornecedor que **administra o DNS**
+do domínio, procure **DNS**, **Zona DNS** ou **Gerenciar registros** e crie:
 
 | Tipo | Nome/host | Valor |
 | --- | --- | --- |
@@ -109,6 +368,29 @@ nslookup api.seudominio.com.br
 O resultado deve incluir o IPv4 do servidor. O frontend do exemplo usa outro
 endereço, `app.seudominio.com.br`, e deve apontar para onde ele estiver
 hospedado, não necessariamente para este VPS.
+
+Por exemplo, se o domínio for `meusite.com.br` e o Elastic IP for o que você
+anotou, o registro tem nome `api` e valor igual a esse IP; o endereço final é
+`api.meusite.com.br`. Não coloque `https://` nem a porta no valor do registro.
+Se já houver um registro `api`, edite-o em vez de criar entradas conflitantes.
+No Route 53, crie o registro na zona hospedada que realmente atende ao domínio;
+uma zona nova, sozinha, não altera os servidores DNS do domínio e pode ter
+custo. A propagação pode demorar. Se `nslookup` não estiver instalado, use
+uma ferramenta de consulta DNS disponível no seu sistema.
+
+### 2.8 Saiba interromper custos
+
+**Stop / Parar** desliga a instância e interrompe a cobrança de computação
+sob demanda enquanto ela está parada, mas o armazenamento EBS, snapshots,
+Elastic IP e outros recursos podem continuar sendo cobrados. O serviço também
+fica indisponível. **Terminate / Encerrar** é uma operação definitiva e pode
+apagar o disco e os dados. Antes de qualquer ação, faça e teste backups e
+consulte a documentação AWS. Após encerrar recursos de teste, verifique volumes,
+snapshots e Elastic IPs remanescentes e a página de faturamento; não apague
+dados que você precisa manter.
+
+Com a instância criada, o IP fixo e o nome público anotados, continue para
+a seção 3. A primeira conexão SSH da seção 4 usa o arquivo `.pem` criado aqui.
 
 ## 3. Ajustes no código antes de publicar
 
@@ -134,6 +416,11 @@ Assim segredos e histórico Git não entram no contexto de build. Não adicione
 segredos ao repositório. Verifique com `git status` antes de cada commit.
 
 ### 3.2 Configure o endereço permitido do frontend
+
+**Se ainda não tem frontend publicado**, mantenha temporariamente
+`http://localhost:5173` no código. Um teste por `curl` não depende de CORS.
+O DNS público do EC2 é o endereço da API, não automaticamente o endereço do
+frontend. Antes de usar um frontend publicado, faça o ajuste abaixo.
 
 Em `src/main.ts`, dentro de `app.enableCors`, substitua a origem
 `http://localhost:5173` pela origem **exata** do seu frontend publicado:
@@ -182,7 +469,28 @@ migration. Migrations destrutivas podem impedir rollback do código.
 ### 3.4 Envie os ajustes iniciais ao GitHub
 
 Trabalhe em uma branch de desenvolvimento, revise as alterações e crie um pull
-request para `main`. Por exemplo, depois de salvar os arquivos:
+request para `main`. Um pull request é uma proposta para incorporar as
+alterações à branch principal. No terminal do **computador**, dentro do
+projeto, confira primeiro a branch e alterações que já existem:
+
+```bash
+git status
+git branch --show-current
+```
+
+Se já estiver usando `develop` para suas alterações, você pode usá-la. Caso
+queira criar uma branch nova a partir de uma `main` atualizada e **não tenha
+alterações não salvas em outras branches**, execute:
+
+```bash
+git switch main
+git pull --ff-only origin main
+git switch -c preparar-deploy-aws
+```
+
+Se o Git impedir a troca ou o pull, não force nem descarte alterações:
+resolva primeiro. Depois de salvar os arquivos da seção 3, confira a branch
+novamente e substitua `NOME_DA_SUA_BRANCH` pelo nome exibido:
 
 ```bash
 git status
@@ -200,16 +508,40 @@ preparar e testar o servidor manualmente.
 
 ### 4.1 Conecte por SSH e crie um usuário
 
-No **computador**, conecte-se conforme a instrução do fornecedor. Exemplos de
-usuário inicial são `root` ou `ubuntu`; consulte o painel:
+Se você criou a instância EC2 na seção 2, encontre o arquivo
+`finance-aws.pem` baixado **no computador**. Por exemplo, se ele estiver em
+`~/Downloads`, crie uma pasta protegida para chaves e copie-o:
 
 ```bash
-ssh USUARIO_INICIAL@SEU_IP
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+cp ~/Downloads/finance-aws.pem ~/.ssh/finance-aws.pem
+chmod 600 ~/.ssh/finance-aws.pem
 ```
 
-Na primeira conexão, confirme a impressão digital da chave do servidor usando
-o painel ou console do fornecedor antes de aceitá-la. Se ela mudar depois,
-investigue; não aceite automaticamente.
+Se o arquivo estiver em outra pasta, ajuste o caminho do `cp`. Em Windows com
+WSL, copie-o para a pasta Linux `~/.ssh`, não trabalhe diretamente na pasta
+montada do Windows. A cópia original em Downloads continua existindo: proteja
+ou remova essa cópia com cuidado depois de verificar que a nova funciona.
+
+Antes de conectar, no console EC2 selecione a instância → **Actions → Monitor
+and troubleshoot → Get system log**. Procure `BEGIN SSH HOST KEY
+FINGERPRINTS` e anote a impressão digital da chave de host **ED25519**. Compare
+com a impressão exibida pelo comando SSH antes de aceitar. Se o log não
+mostrar a impressão, aguarde a primeira inicialização e consulte a
+[orientação oficial da AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/connection-prereqs-general.html#connection-prereqs-fingerprint);
+se não conseguir verificá-la por um canal confiável, pare antes de confirmar.
+
+No computador, conecte-se substituindo `SEU_IP` pelo **Elastic IP**:
+
+```bash
+ssh -i ~/.ssh/finance-aws.pem ubuntu@SEU_IP
+```
+
+O usuário inicial da imagem Ubuntu oficial é `ubuntu`. Se a impressão digital
+corresponder à obtida no console, confirme com `yes`. Se não corresponder ou
+mudar depois, não aceite: investigue. Para outro fornecedor, use seu usuário
+inicial, chave e procedimento seguro de verificação.
 
 No **servidor**, crie um usuário de operação chamado `deploy`:
 
@@ -219,24 +551,40 @@ sudo usermod -aG sudo deploy
 sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 ```
 
-Para acessar esse usuário com sua chave de administração, copie a **chave
-pública** do seu computador, aquela terminada em `.pub`, para
-`/home/deploy/.ssh/authorized_keys`. Uma opção é, no **computador**:
+Agora autorize o mesmo par de chaves para o usuário `deploy`. Não copie a
+chave privada para o servidor. No **computador**, em outro terminal, gere e
+exiba apenas a chave pública correspondente ao arquivo `.pem`:
 
 ```bash
-ssh-copy-id -i ~/.ssh/id_ed25519.pub deploy@SEU_IP
+ssh-keygen -y -f ~/.ssh/finance-aws.pem
 ```
 
-Isso pode pedir a senha criada no `adduser`. Se a sua chave tiver outro nome,
-ajuste o caminho. Se o fornecedor desabilitou autenticação por senha, o
-`ssh-copy-id` pode falhar: na sessão administrativa original, execute
-`sudo nano /home/deploy/.ssh/authorized_keys`, cole a linha completa da sua
-chave **pública**, salve e ajuste o arquivo com
-`sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys` e
-`sudo chmod 600 /home/deploy/.ssh/authorized_keys`.
+Copie a linha pública exibida, que começa com `ssh-rsa`. Na sessão original
+conectada como `ubuntu`, execute:
 
-Abra **outro terminal** e teste `ssh deploy@SEU_IP` e `sudo
-whoami` antes de sair da sessão original. Guarde a senha de sudo com segurança.
+```bash
+sudo nano /home/deploy/.ssh/authorized_keys
+```
+
+Cole a linha pública inteira em uma linha, salve com `Ctrl+O`, Enter e saia com
+`Ctrl+X`. Depois ajuste proprietário e permissões:
+
+```bash
+sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
+sudo chmod 600 /home/deploy/.ssh/authorized_keys
+```
+
+No **outro terminal do computador**, teste a nova conta:
+
+```bash
+ssh -i ~/.ssh/finance-aws.pem deploy@SEU_IP
+sudo whoami
+```
+
+O segundo comando roda **no servidor** e deve responder `root` depois de
+solicitar a senha criada no `adduser`. Só feche a sessão original depois de
+confirmar o acesso. Guarde a senha de sudo com segurança. Nas próximas
+conexões SSH manuais como `deploy`, informe também `-i ~/.ssh/finance-aws.pem`.
 
 No servidor, instale atualizações e ferramentas:
 
@@ -250,13 +598,39 @@ sudo apt install -y ca-certificates curl git ufw openssl
 
 Em um Ubuntu novo, siga a seção **Install using the apt repository** da
 [documentação oficial do Docker para Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
-Ela fornece os comandos atuais para configurar a chave, o repositório oficial
-e instalar `docker-ce`, `docker-ce-cli`, `containerd.io`,
-`docker-buildx-plugin` e `docker-compose-plugin`. Não use scripts de instalação
-rápida em produção. Se já houver Docker ou pacotes conflitantes, siga as
-instruções oficiais antes de continuar.
+Em uma instância recém-criada com Ubuntu 24.04, no **servidor**, configure a
+chave e o repositório oficial:
 
-Depois, no servidor:
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+```
+
+Crie o arquivo de configuração do repositório:
+
+```bash
+sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: noble
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+```
+
+Agora instale e teste o Docker:
+
+```bash
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+```
+
+Se a instalação relatar pacotes conflitantes ou Ubuntu diferente de 24.04,
+pare e siga a documentação oficial. Depois:
 
 ```bash
 sudo systemctl enable --now docker
@@ -264,7 +638,14 @@ sudo docker run --rm hello-world
 sudo usermod -aG docker deploy
 ```
 
-Saia e conecte novamente como `deploy`; então confira:
+Saia com `exit` e, no **computador**, conecte novamente para que o grupo tenha
+efeito:
+
+```bash
+ssh -i ~/.ssh/finance-aws.pem deploy@SEU_IP
+```
+
+No servidor, confira:
 
 ```bash
 docker --version
@@ -361,6 +742,51 @@ Se seu repositório for outro, substitua a URL. A pasta `app` é código; a past
 
 ## 6. Configure banco, e-mail e HTTPS
 
+### 6.0 Prepare o envio de e-mail com Amazon SES
+
+O cadastro da API depende de e-mail. Vamos usar o **Amazon SES** como exemplo,
+sem instalar servidor de e-mail. Antes de continuar, confira no console se SES
+está disponível para seu plano, região e conta e se o uso consome créditos ou
+gera cobrança. Se exigir plano pago ou outro custo que você não aceite, pare:
+será necessário escolher outro SMTP e usar os dados dele no `.env`.
+
+1. No console AWS, escolha uma região em que o SES esteja disponível, pesquise
+   **Amazon SES** e abra o serviço. Anote a região: a verificação, as
+   credenciais e o endereço SMTP precisam corresponder a ela.
+2. No menu, abra **Configuration → Verified identities → Create identity**.
+   **Sem domínio próprio**, escolha **Email address**, informe um endereço que
+   você controla e confirme o link enviado pela AWS. Aguarde o status
+   **Verified**; use esse endereço exato como remetente `MAIL_FROM`.
+
+   **Com domínio próprio**, você pode escolher **Domain**, informar o domínio
+   sem `https://` nem `api.` e criar a identidade. Copie os registros **CNAME
+   DKIM** mostrados no SES para o painel DNS do domínio e aguarde **Verified**.
+   O DNS público do EC2 não é seu domínio: não tente verificá-lo como tal.
+3. Para testar no sandbox, o endereço que **receberá** a mensagem também deve
+   ser verificado. Se for diferente do remetente, adicione-o em **Create
+   identity → Email address** e confirme o link. Se for o mesmo endereço
+   individual já verificado, não é necessário cadastrá-lo novamente.
+4. No SES, abra **SMTP settings → Create SMTP credentials**. Siga a criação
+   do usuário SMTP, guarde com segurança o **SMTP username** e a **SMTP
+   password** exibidos ou baixados. Não são a senha do console nem as chaves
+   comuns de acesso AWS. As credenciais são específicas da região. A criação
+   pode exigir permissões IAM; não conceda permissões extras sem necessidade.
+5. Em **SMTP settings**, anote o endpoint da região. Use a porta `587` com
+   STARTTLS: no `.env` abaixo, `MAIL_HOST` será o endpoint, `MAIL_PORT=587`,
+   `MAIL_SECURE=false`, e usuário/senha serão os dados SMTP. `MAIL_FROM` deve
+   ser o endereço individual verificado ou um remetente do domínio verificado.
+6. Contas SES novas ficam em **sandbox**: só enviam a destinatários
+   verificados, com limites de envio. Para enviar aos usuários reais, abra
+   **Account dashboard → Get set up → Request production access**, solicite
+   acesso para e-mails transacionais e aguarde aprovação. A aprovação não é
+   garantida; remetentes continuam exigindo verificação. Configure e monitore
+   retornos de falha e reclamações antes de uso real.
+
+Veja [credenciais SMTP do SES](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html),
+[identidades](https://docs.aws.amazon.com/ses/latest/dg/creating-identities.html)
+e [saída do sandbox](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html).
+Não use a porta 25: EC2 pode restringi-la.
+
 ### 6.1 Crie segredos e o arquivo de ambiente
 
 No servidor, gere três valores aleatórios independentes:
@@ -399,6 +825,13 @@ MAIL_PASSWORD=SENHA_SMTP
 MAIL_FROM=no-reply@seudominio.com.br
 ```
 
+Se estiver testando **sem domínio ou frontend**, substitua `MAIL_FROM` pelo
+endereço individual verificado no SES e use temporariamente
+`FRONTEND_URL=http://localhost:5173`. Sem um frontend nessa URL, os links
+dos e-mails não abrirão uma página funcional; a confirmação pode ser testada
+manualmente com o token, conforme a seção 8. Para publicar um frontend depois,
+altere a URL e o CORS e recrie a API.
+
 Se o provedor SMTP fornecer uma senha com caracteres especiais como `$` ou
 `#`, escreva o valor entre aspas simples no `.env`, por exemplo
 `MAIL_PASSWORD='senha$exemplo#'`; não use literalmente essa senha. Consulte a
@@ -415,16 +848,14 @@ volume vazio**. Mudar essas variáveis depois não altera automaticamente o
 banco existente. Para alterar a senha, faça também a alteração no PostgreSQL
 com um procedimento apropriado e coordenado.
 
-Para e-mail, contrate ou configure um provedor SMTP transacional, verifique o
-domínio remetente e configure os registros DNS exigidos pelo fornecedor, como
-SPF e DKIM. Copie os dados SMTP reais do painel. A porta 587 normalmente usa
+Para e-mail, use os dados SMTP reais preparados na seção 6.0. A porta 587 normalmente usa
 `MAIL_SECURE=false` e STARTTLS; para TLS implícito na porta 465 use
 `MAIL_SECURE=true`, conforme as instruções do provedor. A porta 25 pode ser
 bloqueada pelo VPS. Mailpit só captura mensagens de desenvolvimento e não
-envia e-mails reais. `FRONTEND_URL` deve apontar para o frontend real, que
-precisa implementar `/confirmar-email`, `/reset-password` e
-`/confirmar-troca-email`. Sem frontend, os links enviados não completarão
-esses fluxos.
+envia e-mails reais. Para concluir os fluxos pelo navegador, `FRONTEND_URL`
+deve apontar para o frontend real, que precisa implementar `/confirmar-email`,
+`/reset-password` e `/confirmar-troca-email`. Sem frontend, a confirmação pode
+ser testada manualmente conforme a seção 8.
 
 ### 6.2 Crie o Compose de produção
 
@@ -488,6 +919,18 @@ api.seudominio.com.br {
     reverse_proxy api:3000
 }
 ```
+
+Se ainda não tem domínio, troque `api.seudominio.com.br` pelo **DNS público
+do EC2** anotado na seção 2.7, sem `https://` e sem barra. Por exemplo:
+
+```caddyfile
+ec2-12-34-56-78.us-east-2.compute.amazonaws.com {
+    reverse_proxy api:3000
+}
+```
+
+O nome acima é ilustrativo: use o seu. Obter um certificado para o endereço da
+AWS não é garantido; veja a alternativa segura de teste por SSH na seção 8.
 
 Na pasta de produção, confira a sintaxe sem mostrar senhas na tela:
 
@@ -564,11 +1007,16 @@ docker compose logs --tail=100 caddy
 ```
 
 O Caddy solicita e renova o certificado automaticamente. Os volumes dele
-guardam os dados necessários para isso. No computador:
+guardam os dados necessários para isso. Use abaixo o endereço configurado no
+`Caddyfile`: seu domínio **ou seu DNS público do EC2**. No computador:
 
 ```bash
-curl -i https://api.seudominio.com.br/
+curl -i https://SEU_ENDERECO_PUBLICO/
 ```
+
+Substitua `SEU_ENDERECO_PUBLICO` pelo nome real, sem adicionar uma segunda
+vez `https://`. Para DNS do EC2, por exemplo, use o nome completo anotado na
+seção 2.7. Não use `-k` para ignorar erros de certificado.
 
 Este projeto não define uma rota `GET /`, portanto **404 é esperado**; isso
 mostra apenas que o HTTPS chegou a uma aplicação HTTP, não que todas as funções
@@ -576,12 +1024,71 @@ e o banco estão saudáveis. Erro de certificado, timeout ou 502 não é sucesso
 O Swagger `/docs` está disponível apenas com `NODE_ENV=development`; não
 ative esse modo em produção apenas para vê-lo.
 
+### Se o certificado não for emitido para o DNS do EC2
+
+Verifique se o DNS resolve para o IP atual, se as portas 80 e 443 estão
+acessíveis e veja `docker compose logs --tail=100 caddy`. A emissão para o
+nome fornecido pela AWS depende da autoridade certificadora e pode falhar.
+Não envie senhas ou dados financeiros por HTTP público e não ignore avisos
+de certificado. Você pode testar a API **privadamente** por um túnel SSH:
+
+1. No **servidor**, crie `~/finance/producao/compose.teste.yaml`:
+
+   ```yaml
+   services:
+     api:
+       ports:
+         - "127.0.0.1:3000:3000"
+   ```
+
+2. Na pasta `~/finance/producao`, aplique o arquivo adicional:
+
+   ```bash
+   docker compose -f compose.yaml -f compose.teste.yaml up -d api
+   ```
+
+   A porta 3000 ficará disponível apenas no próprio servidor, não na internet.
+3. Em outro terminal do **computador**, abra o túnel, substituindo `SEU_IP`
+   pelo IPv4 público:
+
+   ```bash
+   ssh -i ~/.ssh/finance-aws.pem -L 3000:127.0.0.1:3000 deploy@SEU_IP
+   ```
+
+   Mantenha essa sessão aberta. Em outro terminal do computador, teste:
+
+   ```bash
+   curl -i http://127.0.0.1:3000/
+   ```
+
+   Um **404** é esperado para `/`; o tráfego entre computador e servidor
+   passa pelo SSH criptografado. Uma porta local 3000 ocupada pode impedir o
+   túnel: nesse caso use `-L 3001:127.0.0.1:3000` e consulte a porta `3001`.
+4. Ao terminar, feche a sessão do túnel com `exit`. Para remover a publicação
+   temporária da porta no servidor, execute:
+
+   ```bash
+   cd ~/finance/producao
+   docker compose -f compose.yaml up -d --force-recreate api
+   ```
+
+Esse teste não prova que HTTPS público funciona. O cookie de refresh é
+`Secure` em produção; clientes podem não enviá-lo em HTTP, mesmo pelo túnel.
+Para testar integralmente frontend e cookies, será necessário HTTPS válido e
+uma configuração adequada de origem e domínio.
+
+### Testes funcionais
+
 Teste também com um frontend de teste ou cliente HTTP:
 
 1. Cadastre uma conta de teste em `POST /users`, com CNPJ válido, e-mail que
    você controla e senha que atenda às validações. Não use dados reais de
    terceiros sem necessidade.
-2. Confira o recebimento do e-mail e complete a confirmação no frontend.
+2. Confira o recebimento do e-mail e complete a confirmação no frontend. Se
+   não tiver frontend, copie o valor de `token` no link recebido e envie-o no
+   corpo JSON `{"token":"VALOR_DO_TOKEN"}` para `POST /auth/verify-email`
+   usando um cliente HTTP pelo HTTPS válido ou pelo túnel SSH. Não compartilhe
+   o token.
 3. Faça login em `POST /auth/login`, teste uma rota protegida como
    `GET /users/me`, renovação em `POST /auth/refresh` e logout.
 4. Teste recuperação de senha e troca de e-mail. Confirme que o navegador envia
@@ -658,10 +1165,18 @@ No **computador**, crie uma chave dedicada, sem passphrase, para o Actions
 ssh-keygen -t ed25519 -C "github-actions-finance" -f ~/.ssh/finance_actions
 ```
 
-Instale a chave pública no servidor:
+Mostre a chave pública no computador:
 
 ```bash
-ssh-copy-id -i ~/.ssh/finance_actions.pub deploy@SEU_IP
+cat ~/.ssh/finance_actions.pub
+```
+
+Copie a linha exibida. Em uma sessão já conectada ao **servidor** como
+`deploy`, abra `nano ~/.ssh/authorized_keys` e acrescente essa chave em uma
+**nova linha**, mantendo a chave de administração que já está no arquivo.
+Salve e saia. No **computador**, teste a chave de automação:
+
+```bash
 ssh -i ~/.ssh/finance_actions deploy@SEU_IP
 ```
 
@@ -700,12 +1215,60 @@ repository secret**. Cadastre:
 | `SSH_PRIVATE_KEY` | Conteúdo completo da chave **privada** `~/.ssh/finance_actions`, incluindo linhas BEGIN e END |
 | `SSH_KNOWN_HOSTS` | Conteúdo da entrada verificada de `~/.ssh/finance_servidor_known_hosts` |
 
+Para visualizar os dois valores no terminal **privado do computador**, use
+`cat ~/.ssh/finance_actions` e `cat ~/.ssh/finance_servidor_known_hosts`,
+respectivamente. Copie a chave privada apenas para o campo do secret correto;
+não compartilhe tela ou terminal, tire captura, envie por mensagem ou a salve
+no repositório. O GitHub não mostra o valor do secret depois de salvo.
+
 Não imprima a chave privada em logs públicos nem cole em arquivos versionados.
 O Actions precisa alcançar a porta 22; avalie a exposição com cuidado. Proteja
 a `main` com regras de branch, revisão de pull requests e permissão de escrita
 apenas a pessoas confiáveis. Quem puder alterar o workflow ou código executado
 em `main` pode comprometer o servidor ou acessar dados e secrets. Habilite 2FA
 e monitore os acessos.
+
+**Se estiver usando o EC2 da seção 2:** volte ao console AWS, na mesma região,
+abra **EC2 → Instances → finance-api → Security**, clique no grupo de
+segurança e em **Edit inbound rules** para administrar as origens SSH. A
+regra restrita ao IPv4 da sua conexão permite o acesso administrativo, mas
+não libera automaticamente os
+runners do GitHub. Para automatizar com menos exposição, configure uma alternativa
+adequada ao seu nível de segurança, como um runner
+em infraestrutura própria com IP fixo e confiável, ou uma solução de acesso
+privado; isso exige configuração adicional fora deste guia. Outra possibilidade
+é gerenciar uma lista atualizada de faixas de IP do GitHub, que pode ser
+ampla, mudar e exceder quotas do security group. Consulte a
+[documentação oficial dos IPs do GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses)
+e avalie o risco. **Sem uma dessas soluções, o deploy manual funciona, mas o
+workflow automático não conseguirá conectar ao servidor.** Não confunda os IPs
+do GitHub com a chave pública SSH.
+
+Como alternativa mais simples, mas **menos segura**, você pode permitir SSH
+de qualquer IPv4. Isso expõe a porta 22 a tentativas de acesso da internet
+inteira; uma vulnerabilidade ou chave roubada pode permitir invasão. Use essa
+opção apenas se entender e aceitar o risco:
+
+1. Confirme que o acesso com as duas chaves funciona e que as chaves privadas
+   e os secrets estão protegidos. No servidor, consulte a configuração efetiva
+   do SSH com:
+
+   ```bash
+   sudo sshd -T | grep -E '^(passwordauthentication|kbdinteractiveauthentication|pubkeyauthentication) '
+   ```
+
+   Para este caminho, a autenticação por senha e por teclado interativo deve
+   estar `no`, e a por chave pública deve estar `yes`. Se estiver diferente,
+   configure e teste o SSH por chaves com cuidado antes de prosseguir; mantenha
+   uma sessão administrativa aberta para não perder o acesso.
+2. Na edição das regras de entrada do grupo de segurança, edite a regra
+   **SSH**: deixe TCP `22` e escolha **Anywhere-IPv4** (`0.0.0.0/0`). Salve
+   e confira também o UFW. Não abra PostgreSQL nem outras portas internas.
+3. Configure monitoramento e mantenha Ubuntu e OpenSSH atualizados. A regra
+   não autoriza login por si só, mas aumenta a superfície de ataque. Para
+   voltar a restringir o acesso, substitua a origem pelo IPv4 público da sua
+   conexão com `/32` ou por outros IPs confiáveis; o Actions hospedado pelo
+   GitHub pode voltar a falhar.
 
 ### 10.3 Crie o workflow
 
@@ -770,7 +1333,26 @@ e-mail, banco ou monitoramento. Se a atualização falhar, ela pode deixar a API
 indisponível; não existe rollback automático. Para acionar manualmente, abra
 **Actions → Deploy producao → Run workflow** na `main`.
 
-Faça commit desse arquivo em uma branch e abra um pull request. Depois do
+Na raiz do projeto **no computador**, crie as pastas se ainda não existirem:
+
+```bash
+mkdir -p .github/workflows
+```
+
+Salve o conteúdo acima em `.github/workflows/deploy.yml`. Confira a branch e
+as alterações antes de registrar somente o workflow:
+
+```bash
+git status
+git branch --show-current
+git add .github/workflows/deploy.yml
+git commit -m "Add production deployment workflow"
+git push -u origin NOME_DA_SUA_BRANCH
+```
+
+Substitua `NOME_DA_SUA_BRANCH` pelo nome exibido e use uma branch de trabalho,
+não `main`, se for abrir um pull request. Abra o pull request no GitHub e
+confira se aponta para `main`. Depois do
 merge na `main`, abra a aba **Actions**, selecione a execução e acompanhe os
 logs. Um ícone verde indica que o comando e a verificação simples passaram;
 confira também a URL HTTPS e os testes funcionais. Um ícone vermelho significa
@@ -841,7 +1423,7 @@ restaura dados.
 | Erro 502 | API não iniciou ou falhou; veja `docker compose ps` e logs da API e do banco. |
 | API não conecta ao banco | `POSTGRES_HOST=db`, variáveis, saúde do banco e credenciais originais do volume. |
 | Migration/tabela não existe | Confira a inicialização do banco vazio; não ative sincronização em banco com dados. |
-| Não chega e-mail | Credenciais SMTP, porta, DNS e domínio remetente verificado; confira logs sem expor senhas. |
+| Não chega e-mail | Credenciais SMTP, porta, identidade do remetente e destinatário verificado no sandbox; confira logs sem expor senhas. |
 | Login funciona, refresh falha | HTTPS, `SameSite`, mesmo site e envio de credenciais pelo frontend. |
 | Erro de CORS | Origem exata configurada em `src/main.ts`; `FRONTEND_URL` não altera CORS. |
 | `/docs` retorna 404 | É esperado em produção neste projeto. |
@@ -861,6 +1443,9 @@ restaura dados.
 
 ### Referências oficiais
 
+- [Free Tier da AWS](https://aws.amazon.com/free/)
+- [Planos de conta Free e Paid](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/free-tier-plans.html)
+- [Regras do Free Tier para EC2](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-free-tier-usage.html)
 - [Instalação do Docker no Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
 - [HTTPS automático do Caddy](https://caddyserver.com/docs/automatic-https)
 - [Secrets do GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions)
