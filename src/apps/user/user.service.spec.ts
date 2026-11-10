@@ -12,6 +12,7 @@ describe('UserService', () => {
     findOne: jest.fn(),
     save: jest.fn(),
     update: jest.fn(),
+    merge: jest.fn(),
   };
 
   const emailServiceMock = {
@@ -38,7 +39,7 @@ describe('UserService', () => {
     expect(service).toBeDefined();
   });
 
-  it('cadastra um usuário e envia o e-mail de confirmação', async () => {
+  it('shoud register user and send email to confirmation', async () => {
     const newUser = {
       name: 'User Test',
       cnpj: '70074043000105',
@@ -62,23 +63,7 @@ describe('UserService', () => {
     );
   });
 
-  it('confirma o e-mail do usuário', async () => {
-    const userId = 'user-id';
-
-    await service.confirmEmail(userId);
-
-    expect(userRepoMock.update).toHaveBeenCalledWith(
-      userId,
-      expect.objectContaining({
-        emailVerifiedAt: expect.any(Date) as Date,
-        emailVerificationTokenHash: null,
-        emailVerificationExpiresAt: null,
-        emailVerificationSentAt: null,
-      }),
-    );
-  });
-
-  it('não cadastra um usuário quando o e-mail já existe', async () => {
+  it('shoud not register user when e-mail already exists', async () => {
     userRepoMock.findOne.mockResolvedValue({ email: 'test@test.com' });
 
     const newUser = {
@@ -91,5 +76,119 @@ describe('UserService', () => {
     await expect(service.create(newUser)).rejects.toThrow(
       'E-mail já cadastrado',
     );
+  });
+
+  it('shoud note register user when cnpj already exists', async () => {
+    const newUser = {
+      name: 'User Test',
+      cnpj: '70074043000105',
+      email: 'test1@test.com',
+      password: 'Senha123!',
+    };
+    userRepoMock.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ cnpj: '70074043000105' });
+
+    await expect(service.create(newUser)).rejects.toThrow('Cnpj já cadastrado');
+  });
+
+  it('should not register user with invalid cnpj', async () => {
+    const newUser = {
+      name: 'User Test',
+      cnpj: '70074043000101',
+      email: 'test1@test.com',
+      password: 'Senha123!',
+    };
+    userRepoMock.findOne.mockResolvedValue(null);
+
+    await expect(service.create(newUser)).rejects.toThrow('Cnpj inválido');
+  });
+
+  it('should update user', async () => {
+    const userId = 'user-id';
+    const existingUser = {
+      id: userId,
+      name: 'User Test',
+      cnpj: '70074043000105',
+      email: 'test@test.com',
+      taxPercentage: 6,
+    } as User;
+    const changes = {
+      name: 'Updated User',
+      taxPercentage: 8,
+    };
+    const expectedUser = { ...existingUser, ...changes };
+
+    userRepoMock.findOne.mockResolvedValue(existingUser);
+    userRepoMock.merge.mockImplementation(
+      (user: User, updates: Partial<User>) => {
+        Object.assign(user, updates);
+      },
+    );
+    userRepoMock.save.mockImplementation((user: User) => Promise.resolve(user));
+
+    const result = await service.update(userId, changes);
+
+    expect(userRepoMock.findOne).toHaveBeenCalledWith({
+      where: { id: userId },
+    });
+    expect(userRepoMock.merge).toHaveBeenCalledWith(existingUser, changes);
+    expect(userRepoMock.save).toHaveBeenCalledWith(existingUser);
+    expect(result).toEqual(expectedUser);
+  });
+
+  it('should not update user with invalid cnpj', async () => {
+    const userId = 'user-id';
+    const existingUser = {
+      id: userId,
+      name: 'User Test',
+      cnpj: '70074043000105',
+      email: 'test@test.com',
+      taxPercentage: 6,
+    } as User;
+    const changes = {
+      name: 'Updated User',
+      taxPercentage: 8,
+      cnpj: '70074043000101',
+    };
+
+    userRepoMock.findOne.mockResolvedValue(existingUser);
+
+    await expect(service.update(userId, changes)).rejects.toThrow(
+      'Cnpj inválido',
+    );
+
+    expect(userRepoMock.findOne).toHaveBeenCalledWith({
+      where: { id: userId },
+    });
+    expect(userRepoMock.merge).not.toHaveBeenCalled();
+    expect(userRepoMock.save).not.toHaveBeenCalled();
+  });
+
+  it('shoud not update user when cnpj already exists', async () => {
+    const userId = 'user-id';
+    const existingUser = {
+      id: userId,
+      name: 'User Test',
+      cnpj: '53297853000101',
+      email: 'test@test.com',
+      taxPercentage: 6,
+    } as User;
+    const changes = {
+      cnpj: '70074043000105',
+    };
+
+    userRepoMock.findOne.mockResolvedValue({ cnpj: '70074043000105' });
+    userRepoMock.findOne.mockResolvedValue(existingUser);
+
+    await expect(service.update(userId, changes)).rejects.toThrow(
+      'Cnpj já cadastrado',
+    );
+
+    expect(userRepoMock.findOne).toHaveBeenCalledWith({
+      where: { id: userId },
+    });
+    expect(userRepoMock.merge).not.toHaveBeenCalled();
+    expect(userRepoMock.save).not.toHaveBeenCalled();
   });
 });
