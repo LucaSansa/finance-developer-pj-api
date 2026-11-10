@@ -1,5 +1,15 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsArray,
+  IsBoolean,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  Max,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { IsOnlyDate } from 'src/common/decorators/is-only-date.decorator';
 import { Type } from 'class-transformer';
 import { UpdateOperacionalPjDto } from 'src/apps/operacional-pj/dto/update-operacional-pj.dto';
@@ -10,19 +20,21 @@ export class UpdateMonthlyClosingDto {
     description: 'Data de fechamento no formato YYYY-MM-DD',
     example: '2025-01-31',
   })
+  @ValidateIf((_object, value) => value !== undefined)
   @IsOnlyDate()
-  @IsOptional()
   closingDate?: string;
 
   @ApiPropertyOptional({
     description: 'Indica se o fechamento foi concluído',
     example: true,
   })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsBoolean()
   isClosing?: boolean;
 
-  @ApiProperty({ example: 6, minimum: 0, maximum: 100 })
+  @ApiPropertyOptional({ example: 6, minimum: 0, maximum: 100 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
@@ -31,14 +43,18 @@ export class UpdateMonthlyClosingDto {
   @ApiPropertyOptional({
     type: UpdateOperacionalPjDto,
   })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsObject()
   @Type(() => UpdateOperacionalPjDto)
+  @ValidateNested()
   operacionalPj?: UpdateOperacionalPjDto;
 
   @ApiPropertyOptional({
     type: [UpdatePersonalExpenseDto],
   })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
   @Type(() => UpdatePersonalExpenseDto)
+  @ValidateNested({ each: true })
   personalExpense?: UpdatePersonalExpenseDto[];
 }

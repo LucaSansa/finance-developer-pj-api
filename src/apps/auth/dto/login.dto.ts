@@ -16,7 +16,7 @@ export class LoginDto {
 
   @ApiProperty({
     description:
-      'Nova senha: de 8 a 12 caracteres, com maiúscula, minúscula, número e símbolo',
+      'Senha da conta: de 8 a 12 caracteres, com maiúscula, minúscula, número e símbolo',
     example: 'Senha@123',
     minLength: 8,
     maxLength: 12,

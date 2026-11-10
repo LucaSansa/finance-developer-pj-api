@@ -1,6 +1,14 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNumber, IsOptional, IsPositive, Max, Min } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsOptional,
+  Max,
+  Min,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { UpdateInvoiceDto } from 'src/apps/invoice/dto/update-invoice.dto';
 
 export class UpdateOperacionalPjDto {
@@ -9,13 +17,14 @@ export class UpdateOperacionalPjDto {
     example: 50.0,
   })
   @Type(() => Number)
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @Min(0)
   accountFee?: number;
 
-  @ApiProperty({ example: 6, minimum: 1, maximum: 100 })
+  @ApiPropertyOptional({ example: 6, minimum: 1, maximum: 100 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(1)
   @Max(100)
@@ -26,16 +35,18 @@ export class UpdateOperacionalPjDto {
     example: 2000.0,
   })
   @Type(() => Number)
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
   @IsNumber({ maxDecimalPlaces: 2 })
-  @IsPositive()
+  @Min(0)
   individualContribution?: number;
 
   @ApiPropertyOptional({
     description: 'Notas fiscais. Quando enviada, substitui a coleção atual.',
     type: [UpdateInvoiceDto],
   })
-  @IsOptional()
+  @ValidateIf((_object, value) => value !== undefined)
+  @IsArray()
   @Type(() => UpdateInvoiceDto)
+  @ValidateNested({ each: true })
   invoice?: UpdateInvoiceDto[];
 }
