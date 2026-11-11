@@ -25,7 +25,7 @@ const migrationsPath = 'dist/migrations/*{.ts,.js}';
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_DB,
       autoLoadEntities: true,
-      synchronize: true,
+      synchronize: false,
       migrations: [migrationsPath],
     }),
     UserModule,

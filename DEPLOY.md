@@ -725,34 +725,75 @@ e modo de desenvolvimento.
 
 ## 5. Permita que o servidor leia o repositório
 
-Usaremos uma chave **separada e somente de leitura** para o servidor buscar
-código no GitHub. No servidor, como `deploy`:
+Nesta etapa, você autoriza o **servidor** a baixar o código do seu repositório
+no GitHub. A chave criada aqui é só para essa leitura; não é a chave
+`finance-aws.pem` usada para entrar no servidor e não é a chave que o GitHub
+Actions usará mais adiante.
+
+Todos os comandos desta etapa são executados no **servidor**, conectado como
+`deploy`. Primeiro, crie uma nova chave SSH:
 
 ```bash
 ssh-keygen -t ed25519 -C "servidor-finance-leitura" -f ~/.ssh/github_repo
 cat ~/.ssh/github_repo.pub
 ```
 
-Para uso não interativo, deixe a passphrase dessa chave específica vazia.
-Copie somente a linha exibida da chave **pública**. No GitHub, acesse o
-repositório → **Settings → Deploy keys → Add deploy key**. Cole a chave,
-escolha um título e deixe **Allow write access** desmarcado. Esta chave é
-diferente da chave que o Actions usará para entrar no servidor.
+Quando aparecer `Enter passphrase`, pressione **Enter** sem digitar nada; na
+pergunta seguinte, pressione **Enter** de novo. Isso deixa essa chave própria
+para o acesso automatizado do servidor.
 
-No servidor, cadastre a identidade do GitHub e verifique a impressão digital
-pelos [dados oficiais de chaves SSH do GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints):
+O trecho `-f ~/.ssh/github_repo` **não é o nome do repositório GitHub**. Ele
+define o nome e o local dos arquivos da chave no servidor: `github_repo` é a
+chave privada, e `github_repo.pub` é a chave pública. O comando `cat` mostra
+esta última. Copie a linha inteira exibida por `cat`; **não copie nem envie**
+o arquivo sem `.pub`.
+
+No site do GitHub, abra **o repositório que este servidor deverá baixar**.
+Entre em **Settings → Deploy keys → Add deploy key**, dê um título que ajude
+a identificar o servidor e cole a linha pública no campo **Key**. Deixe
+**Allow write access** desmarcado e salve. Isso autoriza este servidor a ler
+esse repositório, sem permitir que envie alterações.
+
+Depois de salvar a chave pública no GitHub, confirme que a chave do servidor
+GitHub é legítima antes de confiar nela. Ainda no terminal do servidor, rode:
 
 ```bash
 ssh-keyscan -t ed25519 github.com > ~/.ssh/github_known_hosts
 ssh-keygen -lf ~/.ssh/github_known_hosts
+```
+
+O segundo comando mostrará uma linha com um código `SHA256:...` e `(ED25519)`.
+Por exemplo, a linha termina com algo semelhante a:
+
+```text
+SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU github.com (ED25519)
+```
+
+Esse é o valor Ed25519 publicado pelo GitHub no momento em que este guia foi
+atualizado. Abra também a
+[página oficial de impressões digitais SSH do GitHub](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
+no navegador do computador e confira a seção **Ed25519**. Compare o código
+`SHA256:...` da página com o código exibido pelo comando no servidor. Eles
+precisam ser exatamente iguais. Se forem diferentes, ou se o valor oficial
+publicado tiver mudado, pare e confirme o valor correto na página oficial antes
+de continuar. Não aceite uma chave diferente sem verificar.
+
+`ssh-keyscan` apenas busca a chave apresentada por `github.com`; sozinho, não
+prova que a chave é mesmo do GitHub. É a comparação com a página oficial que
+faz essa verificação. Depois de confirmar que os códigos são iguais, proteja
+o arquivo com:
+
+```bash
 chmod 600 ~/.ssh/github_known_hosts
 ```
 
-Compare o resultado com a impressão digital Ed25519 publicada pelo GitHub. Se
-não corresponder, pare e investigue; `ssh-keyscan` sozinho não autentica a
-identidade.
+Em seguida, crie o arquivo de configuração SSH no servidor:
 
-Crie `~/.ssh/config` no servidor com `nano ~/.ssh/config`:
+```bash
+nano ~/.ssh/config
+```
+
+Cole o conteúdo abaixo no `nano`:
 
 ```sshconfig
 Host github.com
@@ -775,59 +816,217 @@ Uma mensagem de autenticação bem-sucedida que informa que o GitHub não oferec
 acesso shell é esperada; esse teste pode terminar com código 1. Se houver erro
 de chave ou de identidade, resolva antes de continuar.
 
-Clone a branch `main` no servidor:
+Agora copie o código do GitHub para o servidor. Faça isso no **terminal do
+servidor**, conectado como `deploy`. O repositório configurado acima é
+`LucaSansa/finance-developer-pj-api`; o comando abaixo baixa a branch `main`
+para a pasta `~/finance/app`:
 
 ```bash
 mkdir -p ~/finance
 git clone --branch main git@github.com:LucaSansa/finance-developer-pj-api.git ~/finance/app
+```
+
+`mkdir -p ~/finance` cria a pasta principal para os arquivos do projeto. O
+`git clone` baixa o código do GitHub e cria dentro dela a pasta `app`. Aguarde
+o comando terminar; ao final, deve aparecer uma mensagem de conclusão, como
+`Branch 'main' set up to track remote branch 'main'`.
+
+Agora crie uma pasta separada para as configurações privadas usadas na
+produção:
+
+```bash
 mkdir -p ~/finance/producao
 chmod 700 ~/finance/producao
 ```
 
-Se seu repositório for outro, substitua a URL. A pasta `app` é código; a pasta
-`producao` contém configuração privada e fica **fora** do repositório.
+`producao` fica fora do repositório e será usada mais adiante para guardar
+configurações que não devem ser publicadas no GitHub. `chmod 700` restringe o
+acesso a essa pasta ao usuário `deploy`.
+
+Se o repositório do seu projeto tiver outro endereço, substitua
+`LucaSansa/finance-developer-pj-api` pela parte `dono/nome-do-repositorio` da
+URL SSH dele. Não altere `git@github.com:` nem acrescente `.git` duas vezes.
+Se o `git clone` disser que a pasta `~/finance/app` já existe, não apague a
+pasta: verifique se o repositório já foi baixado antes de tentar novamente.
 
 ## 6. Configure banco, e-mail e HTTPS
 
+Esta seção prepara a versão que vai rodar no **servidor**, não a versão local
+do seu computador. No projeto local, o Mailpit recebe os e-mails de teste e
+permite visualizá-los no navegador; ele **não envia mensagens para pessoas
+reais**. O Compose de produção desta seção não instala o Mailpit. Para que
+cadastro, confirmação e recuperação de senha enviem e-mails no servidor, você
+precisa de uma conta em um serviço de e-mail que ofereça SMTP.
+
+O tutorial usa o **Amazon SES** como exemplo. Em resumo, você vai:
+
+1. configurar o SES para enviar e-mail;
+2. guardar os dados SMTP e outras configurações privadas num arquivo `.env` no
+   servidor;
+3. criar os arquivos que iniciam a API, o banco de dados e o acesso HTTPS.
+
+Se você só quer continuar um teste e ainda não precisa enviar e-mails reais,
+saiba que o Mailpit local não substitui a configuração SMTP do servidor. Para
+testar os fluxos de e-mail no EC2, o SES em modo de teste permite enviar
+mensagens para endereços previamente verificados; para enviar a outros
+destinatários, a AWS precisa aprovar a saída do sandbox.
+
 ### 6.0 Prepare o envio de e-mail com Amazon SES
 
-O cadastro da API depende de e-mail. Vamos usar o **Amazon SES** como exemplo,
-sem instalar servidor de e-mail. Antes de continuar, confira no console se SES
-está disponível para seu plano, região e conta e se o uso consome créditos ou
-gera cobrança. Se exigir plano pago ou outro custo que você não aceite, pare:
-será necessário escolher outro SMTP e usar os dados dele no `.env`.
+O SES é o serviço da AWS que enviará os e-mails da API. SMTP é o modo pelo qual
+a API se conecta a esse serviço. Não é preciso instalar um servidor de e-mail
+na EC2. Antes de começar, confira no console AWS se o SES está disponível para
+sua conta e região e se haverá cobrança. Se não quiser usar SES, você pode
+escolher outro serviço SMTP; nesse caso, use os dados fornecidos por ele no
+arquivo `.env` da seção 6.1.
 
-1. No console AWS, escolha uma região em que o SES esteja disponível, pesquise
-   **Amazon SES** e abra o serviço. Anote a região: a verificação, as
-   credenciais e o endereço SMTP precisam corresponder a ela.
-2. No menu, abra **Configuration → Verified identities → Create identity**.
-   **Sem domínio próprio**, escolha **Email address**, informe um endereço que
-   você controla e confirme o link enviado pela AWS. Aguarde o status
-   **Verified**; use esse endereço exato como remetente `MAIL_FROM`.
+1. Primeiro descubra a região onde sua EC2 está rodando. No console AWS,
+   procure **EC2** na barra de pesquisa e abra **Instances / Instâncias**.
+   O seletor de região fica na barra superior, perto do canto superior direito
+   e do nome da conta; pode mostrar o nome, por exemplo **Ohio**, em vez do
+   código. Se não conseguir localizar o seletor, clique na instância
+   `finance-api` e procure **Availability Zone / Zona de disponibilidade** nos
+   detalhes. Ela terá um valor como `us-east-2a`; a região é o mesmo código
+   sem a letra final: `us-east-2`.
 
-   **Com domínio próprio**, você pode escolher **Domain**, informar o domínio
-   sem `https://` nem `api.` e criar a identidade. Copie os registros **CNAME
-   DKIM** mostrados no SES para o painel DNS do domínio e aguarde **Verified**.
-   O DNS público do EC2 não é seu domínio: não tente verificá-lo como tal.
-3. Para testar no sandbox, o endereço que **receberá** a mensagem também deve
-   ser verificado. Se for diferente do remetente, adicione-o em **Create
-   identity → Email address** e confirme o link. Se for o mesmo endereço
-   individual já verificado, não é necessário cadastrá-lo novamente.
-4. No SES, abra **SMTP settings → Create SMTP credentials**. Siga a criação
-   do usuário SMTP, guarde com segurança o **SMTP username** e a **SMTP
-   password** exibidos ou baixados. Não são a senha do console nem as chaves
-   comuns de acesso AWS. As credenciais são específicas da região. A criação
-   pode exigir permissões IAM; não conceda permissões extras sem necessidade.
-5. Em **SMTP settings**, anote o endpoint da região. Use a porta `587` com
-   STARTTLS: no `.env` abaixo, `MAIL_HOST` será o endpoint, `MAIL_PORT=587`,
-   `MAIL_SECURE=false`, e usuário/senha serão os dados SMTP. `MAIL_FROM` deve
-   ser o endereço individual verificado ou um remetente do domínio verificado.
-6. Contas SES novas ficam em **sandbox**: só enviam a destinatários
-   verificados, com limites de envio. Para enviar aos usuários reais, abra
-   **Account dashboard → Get set up → Request production access**, solicite
-   acesso para e-mails transacionais e aguarde aprovação. A aprovação não é
-   garantida; remetentes continuam exigindo verificação. Configure e monitore
-   retornos de falha e reclamações antes de uso real.
+   No seu caso, o terminal mostrou endereços Ubuntu começando com
+   `us-east-2.ec2.archive.ubuntu.com`, então a região é **US East (Ohio),
+   código `us-east-2`**. O assistente inicial do SES pode esconder o seletor
+   de região. Se não conseguir alterá-lo na tela, abra uma nova aba e cole este
+   endereço na barra do navegador:
+
+   ```text
+   https://us-east-2.console.aws.amazon.com/ses/home?region=us-east-2
+   ```
+
+   Pressione `Enter` e, se necessário, entre novamente na AWS. Continue no SES
+   aberto por esse endereço. Para conferir a região da EC2, você também pode
+   abrir:
+
+   ```text
+   https://us-east-2.console.aws.amazon.com/ec2/home?region=us-east-2
+   ```
+
+   As identidades, credenciais SMTP e endpoint do SES precisam ser dessa
+   mesma região.
+2. Se esta é a primeira vez que abre o SES, pode aparecer o assistente inicial
+   **“Adicione seu endereço de e-mail”**, como na tela do tutorial. No campo
+   **Endereço de e-mail**, digite um endereço que você consegue abrir e que
+   pretende usar como remetente. Clique em **Próxima**. Abra a caixa de entrada
+   desse endereço, encontre a mensagem da AWS e clique no link de verificação.
+   Volte ao SES e confirme que o endereço aparece como **Verified**.
+3. A próxima tela do assistente pode ser **“Adicione seu domínio de envio”**.
+   Ela pede um **domínio próprio**, por exemplo `meudominio.com.br`, cujo
+   painel DNS você consegue alterar. Não é o endereço de e-mail, o endereço
+   IP, nem o DNS público da EC2.
+
+   **Se você não comprou um domínio ou não controla o DNS dele:** não preencha
+   essa tela e não invente um endereço. Clique em **Cancelar** para sair do
+   assistente. Depois, no SES, abra **Configuration → Verified identities →
+   Create identity → Email address**, cadastre o e-mail que você verificou no
+   passo anterior e confirme que ele aparece como **Verified**. Esse e-mail
+   individual será o remetente (`MAIL_FROM`) nos testes.
+
+   **Se você tem domínio próprio e controla o DNS:** digite o domínio, sem
+   `https://` e sem caminho (por exemplo, `meudominio.com.br`), e clique em
+   **Próxima**. A AWS mostrará registros DNS para você adicionar no painel do
+   domínio. O campo **Domínio MAIL FROM** da tela é opcional; deixe-o em branco
+   para usar a opção padrão da AWS. Só configure um MAIL FROM personalizado se
+   souber adicionar os registros DNS que a AWS solicitar. Aguarde a identidade
+   do domínio aparecer como **Verified**.
+4. Para o primeiro teste, o SES normalmente está no modo **sandbox**. Nesse
+   modo, ele só envia para endereços que também foram verificados. Verifique
+   pelo mesmo processo o endereço de e-mail onde você quer receber o teste.
+   Depois que a AWS aprovar a saída do sandbox, não será necessário verificar
+   cada destinatário.
+5. Agora obtenha os dados que a API precisa para se conectar ao SES. Abra
+   **SMTP settings**. Na área **Choose credential method / Escolha o método
+   de credencial**, selecione **IAM SMTP credentials / Credenciais SMTP do
+   IAM** (a opção à direita na tela mostrada). Não escolha **SMTP email
+   manager / Gerenciador de e-mail SMTP**: esse recurso gerenciado é
+   desnecessário para este tutorial e a própria tela informa que podem ser
+   cobradas taxas de processamento do Mail Manager.
+
+   Na tela **Specify user details / Especificar detalhes do usuário**, a AWS
+   sugere um nome automático, como `ses-smtp-user...`. Você pode manter esse
+   nome ou trocá-lo por `finance-api-smtp`; ele serve apenas para identificar
+   esse usuário na lista do IAM. Deixe o grupo e a política de permissões que a
+   AWS preencheu como estão. A tela deve indicar a ação
+   `ses:SendRawEmail`; não cole políticas próprias nem conceda outras
+   permissões. Role até o fim, clique em **Next / Próxima** ou
+   **Create user / Criar usuário** (o texto do botão pode variar) e confirme a
+   criação se a AWS pedir.
+
+   Na etapa **Recover SMTP credentials / Recuperar credenciais SMTP**, faça
+   primeiro o seguinte:
+
+   1. Clique em **Baixar arquivo .csv** e salve o arquivo em um local privado
+      do seu computador. Não o envie por e-mail, chat ou GitHub; ele contém a
+      senha SMTP.
+   2. A tela informa que o usuário foi criado **com alguns erros**. Clique em
+      **Visualizar usuário** no aviso amarelo. Na página do usuário, abra a aba
+      **Permissões**. Se ela mostrar **Políticas de permissões (0)**, como na
+      imagem deste tutorial, a política necessária não foi anexada; esse
+      usuário ainda não pode enviar e-mails.
+   3. Para corrigir isso, na página do usuário clique em **Adicionar
+      permissões → Criar política em linha**. Na tela de criação, escolha a
+      opção **JSON**, apague o conteúdo de exemplo e cole somente esta política:
+
+      ```json
+      {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Action": "ses:SendRawEmail",
+            "Resource": "*"
+          }
+        ]
+      }
+      ```
+
+      Clique em **Próxima** ou **Revisar política**, dê o nome
+      `FinanceSesSmtpSend` e crie/salve a política. Volte à aba **Permissões**
+      do usuário e confirme que aparece **Políticas de permissões (1)** e a
+      linha `FinanceSesSmtpSend`. Essa confirmação verde, como na imagem do
+      tutorial, significa que a política foi criada. Ela permite ao usuário
+      enviar mensagens pelo SES; não dá acesso geral à conta AWS.
+   4. Se a aba já mostrar uma política, não crie outra. Se a tela mostrar uma
+      mensagem de erro diferente, ou não encontrar **Criar política em linha**,
+      pare e peça ajuda compartilhando apenas o texto do erro — nunca o CSV,
+      a senha SMTP ou chaves.
+   5. Guarde o **SMTP username** e a **SMTP password** do CSV. São diferentes
+      da senha do console AWS e podem não ser exibidos novamente. Depois você
+      vai preencher `MAIL_USER` e `MAIL_PASSWORD` no `.env` do servidor.
+   6. Só depois de salvar o CSV e confirmar a permissão necessária, clique em
+      **Retornar ao console do SES**.
+
+   Essas credenciais pertencem à região escolhida no passo 1.
+6. Volte à página do SES para obter o endereço do servidor SMTP. Se estiver
+   na página do usuário IAM, use a busca da AWS no alto da tela, digite `SES`
+   e abra **Amazon Simple Email Service (SES)**. Confirme que está em **US
+   East (Ohio) / `us-east-2`** e, no menu esquerdo, clique em
+   **Configurações SMTP**.
+
+   Na página **Configurações do Simple Mail Transfer Protocol (SMTP)**, haverá
+   duas opções: **Gerenciador de e-mail SMTP** e **Credenciais SMTP do IAM**.
+   Selecione **Credenciais SMTP do IAM** (a opção à direita). Não preencha
+   **Nome do endpoint de entrada**, não gere uma senha nessa tela e não crie
+   um endpoint de entrada: esses campos são do Gerenciador de e-mail SMTP, que
+   não será usado neste tutorial. Você já criou o usuário e guardou as
+   credenciais SMTP nos passos anteriores.
+
+   Para a região US East (Ohio), o endereço de envio SMTP é
+   `email-smtp.us-east-2.amazonaws.com`. Esse é o valor de `MAIL_HOST`; não use
+   o nome `ingressendpoint-...`, pois esse é um endpoint de entrada. O **SMTP
+   username** vai em `MAIL_USER` e a **SMTP password** vai em `MAIL_PASSWORD`.
+   Use `MAIL_PORT=587` e `MAIL_SECURE=false`. O remetente `MAIL_FROM` deve ser
+   o endereço ou domínio que você verificou nos passos 2 ou 3.
+7. Para permitir que a API envie para qualquer usuário, peça à AWS para tirar
+   a conta do sandbox: abra **Account dashboard → Get set up → Request
+   production access** e solicite envio de e-mails transacionais. Aguarde a
+   aprovação. Até ela acontecer, só será possível enviar para destinatários
+   verificados. A AWS pode não aprovar o pedido.
 
 Veja [credenciais SMTP do SES](https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html),
 [identidades](https://docs.aws.amazon.com/ses/latest/dg/creating-identities.html)
@@ -836,17 +1035,73 @@ Não use a porta 25: EC2 pode restringi-la.
 
 ### 6.1 Crie segredos e o arquivo de ambiente
 
-No servidor, gere três valores aleatórios independentes:
+Há dois arquivos `.env` diferentes:
+
+- O `.env` do projeto no seu **computador** continua com `MAIL_HOST=mailpit`
+  para os testes locais. Não o altere por causa desta etapa.
+- Aqui você vai criar outro `.env` no **servidor**, no caminho
+  `~/finance/producao/.env`. Esse arquivo configura o envio de e-mails real
+  pela API publicada na EC2.
+
+Faça tudo abaixo no **terminal conectado ao servidor como `deploy`**. O
+arquivo contém senhas e chaves secretas: não o publique no GitHub, não envie
+seu conteúdo por mensagem e não compartilhe capturas de tela que mostrem os
+valores.
+
+#### 1. Gere três segredos
+
+Execute este comando **três vezes**, uma por vez:
 
 ```bash
 openssl rand -hex 32
-openssl rand -hex 32
-openssl rand -hex 32
 ```
 
-Use um para a senha do banco e os outros dois para os segredos JWT. Guarde-os
-com segurança. Crie `~/finance/producao/.env` com `nano` e substitua **todos**
-os valores de exemplo:
+Cada execução mostra uma sequência longa de letras e números. Anote os
+resultados em um local privado e identifique-os pela ordem:
+
+1. Primeiro resultado: senha do banco (`POSTGRES_PASSWORD`).
+2. Segundo resultado: segredo da sessão de acesso (`JWT_ACCESS_SECRET`).
+3. Terceiro resultado: segredo da sessão de renovação (`JWT_REFRESH_SECRET`).
+
+Use um resultado diferente em cada linha. Não digite aspas ao redor deles.
+
+#### 2. Abra o arquivo de produção no servidor
+
+Rode:
+
+```bash
+nano ~/finance/producao/.env
+```
+
+Esse comando abre o editor de texto `nano` no terminal e cria o arquivo caso
+ele ainda não exista. **Confira o caminho antes de editar:** é
+`~/finance/producao/.env`, não o `.env` que está na pasta do projeto no seu
+computador.
+
+#### 3. Preencha o arquivo
+
+Digite ou cole o modelo abaixo dentro do `nano`. Troque cada instrução em
+maiúsculas pelo valor real correspondente. Não deixe nenhum texto
+`SUBSTITUA...` ou `COLE...` no arquivo:
+
+- `POSTGRES_PASSWORD`: primeiro segredo gerado.
+- `JWT_ACCESS_SECRET`: segundo segredo gerado.
+- `JWT_REFRESH_SECRET`: terceiro segredo gerado.
+- `MAIL_USER`: SMTP username do CSV que baixou da AWS.
+- `MAIL_PASSWORD`: SMTP password do CSV; não é sua senha de login da AWS.
+- `MAIL_FROM`: e-mail que aparece como **Verified** no SES.
+- `FRONTEND_URL`: endereço do frontend, se já estiver publicado. Se não
+  estiver, use temporariamente `http://localhost:5173`, conforme explicado
+  abaixo.
+
+Para as outras linhas de e-mail, mantenha `MAIL_HOST`,
+`MAIL_PORT` e `MAIL_SECURE` como estão:
+
+- `MAIL_HOST`: mantenha `email-smtp.us-east-2.amazonaws.com` para sua região
+  US East (Ohio).
+- `MAIL_PORT` e `MAIL_SECURE`: mantenha `587` e `false`.
+
+Não copie este modelo para o `.env` local do projeto.
 
 ```env
 NODE_ENV=production
@@ -864,30 +1119,44 @@ JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_SECRET=SUBSTITUA_PELO_SEGUNDO_SEGREDO_ALEATORIO
 JWT_REFRESH_EXPIRES_IN=1d
 
-MAIL_HOST=SMTP_DO_SEU_PROVEDOR
+MAIL_HOST=email-smtp.us-east-2.amazonaws.com
 MAIL_PORT=587
 MAIL_SECURE=false
-MAIL_USER=USUARIO_SMTP
-MAIL_PASSWORD=SENHA_SMTP
-MAIL_FROM=no-reply@seudominio.com.br
+MAIL_USER=COLE_O_SMTP_USERNAME_DO_CSV
+MAIL_PASSWORD=COLE_A_SMTP_PASSWORD_DO_CSV
+MAIL_FROM=COLE_O_ENDERECO_VERIFICADO_NO_SES
 ```
 
-Se estiver testando **sem domínio ou frontend**, substitua `MAIL_FROM` pelo
-endereço individual verificado no SES e use temporariamente
-`FRONTEND_URL=http://localhost:5173`. Sem um frontend nessa URL, os links
-dos e-mails não abrirão uma página funcional; a confirmação pode ser testada
-manualmente com o token, conforme a seção 8. Para publicar um frontend depois,
-altere a URL e o CORS e recrie a API.
+Por exemplo, se o e-mail verificado for `voce@exemplo.com`, a linha fica
+`MAIL_FROM=voce@exemplo.com`. Esse endereço é só um exemplo: use o endereço
+exato que você verificou.
 
 Se o provedor SMTP fornecer uma senha com caracteres especiais como `$` ou
-`#`, escreva o valor entre aspas simples no `.env`, por exemplo
+`#`, coloque o valor entre aspas simples no `.env`, por exemplo
 `MAIL_PASSWORD='senha$exemplo#'`; não use literalmente essa senha. Consulte a
 [sintaxe de arquivos de ambiente do Compose](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/#env-file-syntax)
 se o valor contiver aspas ou outras particularidades.
 
+Se ainda não tem frontend publicado, troque a linha `FRONTEND_URL` por
+`FRONTEND_URL=http://localhost:5173`. Isso serve apenas para continuar a
+configuração e testar manualmente: sem um frontend rodando nesse endereço, os
+links dos e-mails não abrirão uma página funcional. A seção 8 explica como
+testar usando o token. Quando publicar o frontend, atualize essa linha e o CORS
+da API antes de recriá-la.
+
+#### 4. Salve e proteja o arquivo
+
+No `nano`, pressione **Ctrl+O** para salvar, pressione **Enter** para confirmar
+o nome do arquivo e depois **Ctrl+X** para sair. Você voltará ao prompt do
+terminal. Agora execute:
+
 ```bash
 chmod 600 ~/finance/producao/.env
 ```
+
+Esse comando restringe a leitura do arquivo ao usuário `deploy`. Não mostre o
+conteúdo do `.env` para conferir; verifique apenas se o terminal voltou ao
+prompt sem mensagem de erro.
 
 No Docker, `db` é o nome do serviço PostgreSQL, não `localhost`. O PostgreSQL
 usa usuário, senha e nome do banco **apenas na primeira inicialização de um
@@ -895,18 +1164,32 @@ volume vazio**. Mudar essas variáveis depois não altera automaticamente o
 banco existente. Para alterar a senha, faça também a alteração no PostgreSQL
 com um procedimento apropriado e coordenado.
 
-Para e-mail, use os dados SMTP reais preparados na seção 6.0. A porta 587 normalmente usa
+Para e-mail, use os dados SMTP reais preparados na seção 6.0. Mailpit é só
+para testes locais e não envia e-mails reais. A porta 587 normalmente usa
 `MAIL_SECURE=false` e STARTTLS; para TLS implícito na porta 465 use
 `MAIL_SECURE=true`, conforme as instruções do provedor. A porta 25 pode ser
-bloqueada pelo VPS. Mailpit só captura mensagens de desenvolvimento e não
-envia e-mails reais. Para concluir os fluxos pelo navegador, `FRONTEND_URL`
+bloqueada pelo VPS. Para concluir os fluxos pelo navegador, `FRONTEND_URL`
 deve apontar para o frontend real, que precisa implementar `/confirmar-email`,
 `/reset-password` e `/confirmar-troca-email`. Sem frontend, a confirmação pode
 ser testada manualmente conforme a seção 8.
 
 ### 6.2 Crie o Compose de produção
 
-No servidor, crie `~/finance/producao/compose.yaml`:
+O arquivo `compose.yaml` é a receita que o Docker usará para iniciar três
+partes da aplicação no servidor: o banco de dados (`db`), a API (`api`) e o
+servidor HTTPS (`caddy`). Nesta seção, você vai criar esse arquivo e outro
+chamado `Caddyfile`, que informa ao Caddy para onde encaminhar as conexões.
+
+Faça tudo no **terminal conectado ao servidor como `deploy`**. Para criar ou
+editar um arquivo de texto, sim: coloque `nano` antes do caminho. Primeiro
+abra o arquivo Compose:
+
+```bash
+nano ~/finance/producao/compose.yaml
+```
+
+O editor `nano` vai abrir. Cole nele todo o bloco abaixo, começando por
+`services:` e terminando em `caddy_config:`:
 
 ```yaml
 services:
@@ -954,12 +1237,21 @@ volumes:
   caddy_config:
 ```
 
-Esse arquivo é separado do Compose local. Não há porta publicada para o banco
-ou para a API; o Caddy comunica-se com a API pela rede interna. O Dockerfile
-atual instala dependências e compila a aplicação; o comando acima substitui o
-modo de desenvolvimento do Dockerfile por `start:prod`.
+Salve e saia do `nano`: pressione **Ctrl+O**, depois **Enter** e, por fim,
+**Ctrl+X**. Esse arquivo é separado do Compose local do seu computador. Ele
+mantém o banco e a API acessíveis apenas dentro da rede do Docker; somente o
+Caddy recebe conexões externas nas portas 80 e 443. O Caddy encaminha essas
+conexões para a API. O Docker também compila a aplicação para iniciar no modo
+de produção.
 
-Crie `~/finance/producao/Caddyfile`, trocando o domínio:
+Agora crie o arquivo de configuração do Caddy. Abra-o com `nano`:
+
+```bash
+nano ~/finance/producao/Caddyfile
+```
+
+Cole o bloco abaixo no editor. Troque `api.seudominio.com.br` pelo endereço
+que você usará para acessar a API:
 
 ```caddyfile
 api.seudominio.com.br {
@@ -967,8 +1259,9 @@ api.seudominio.com.br {
 }
 ```
 
-Se ainda não tem domínio, troque `api.seudominio.com.br` pelo **DNS público
-do EC2** anotado na seção 2.7, sem `https://` e sem barra. Por exemplo:
+Se você ainda não tem domínio próprio, use o **DNS público da EC2** anotado na
+seção 2.7 no lugar de `api.seudominio.com.br`. Cole só o nome, sem
+`https://`, sem caminhos e sem barra no final. Por exemplo:
 
 ```caddyfile
 ec2-12-34-56-78.us-east-2.compute.amazonaws.com {
@@ -976,18 +1269,29 @@ ec2-12-34-56-78.us-east-2.compute.amazonaws.com {
 }
 ```
 
-O nome acima é ilustrativo: use o seu. Obter um certificado para o endereço da
-AWS não é garantido; veja a alternativa segura de teste por SSH na seção 8.
+O nome acima é apenas um exemplo: use o DNS público da sua própria instância.
+Depois de colar o conteúdo, salve e saia do `nano` com **Ctrl+O**, **Enter** e
+**Ctrl+X**.
 
-Na pasta de produção, confira a sintaxe sem mostrar senhas na tela:
+O Caddy tentará obter HTTPS automaticamente. A AWS não garante certificado
+para o DNS público da EC2; se não conseguir obtê-lo, use a alternativa de
+teste por túnel SSH explicada na seção 8.
+
+Por fim, confira se os arquivos estão corretos. Execute estes comandos no
+servidor:
 
 ```bash
 cd ~/finance/producao
 docker compose config --quiet
 ```
 
-Em caso de erro, confira os arquivos e valores. Não publique a saída completa
-de `docker compose config`: ela pode revelar senhas.
+`cd` muda para a pasta onde você salvou os arquivos. `docker compose config
+--quiet` verifica se a receita do Docker e o `.env` têm sintaxe válida; quando
+está tudo certo, o comando termina sem imprimir uma mensagem de sucesso. Se
+aparecer um erro, não continue: confira se salvou os dois arquivos nos
+caminhos indicados e se substituiu todos os valores de exemplo no `.env`.
+Não compartilhe a saída completa de `docker compose config`, pois ela pode
+mostrar senhas.
 
 ## 7. Inicialize o banco vazio e desligue a sincronização
 
@@ -1003,8 +1307,15 @@ docker compose ps
 docker compose logs --tail=100 api
 ```
 
-Aguarde a API iniciar. Procure nos logs mensagens de inicialização e erros de
-conexão ou migration. Confira que as tabelas e a migration foram criadas:
+Aguarde os comandos terminarem. No log da API, a linha
+`Nest application successfully started` significa que a API iniciou. Como o
+código executa as migrations antes de iniciar a API, essa linha sem erro de
+migration é um bom sinal; mesmo assim, ela **não confirma sozinha** que a
+tabela e os dados esperados estão no banco. A confirmação é feita consultando
+o banco nos próximos comandos.
+
+Execute os três comandos abaixo, um por vez, ainda na pasta
+`~/finance/producao` do servidor:
 
 ```bash
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\dt"'
@@ -1012,10 +1323,19 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "
 docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT count(*) FROM expense_type;"'
 ```
 
-Deve existir a tabela `expense_type`, uma linha para a migration
-`AddDefaultExpenseType1765994220255` e 17 tipos de despesa em um banco novo.
-Se isso não acontecer, pare: verifique os logs. Não apague o volume como forma
-de resolver um problema sem antes entender suas consequências.
+Confira os resultados:
+
+- No primeiro resultado, procure `expense_type` na lista de tabelas.
+- No segundo, procure uma linha chamada
+  `AddDefaultExpenseType1765994220255`.
+- No terceiro, o número deve ser `17`.
+
+Esses são os sinais de que o banco novo foi preparado. Se um comando mostrar
+erro, a tabela não aparecer, a migration não estiver listada ou o total não
+for 17, **pare aqui**. Copie a mensagem de erro (sem senhas) e verifique os
+logs com `docker compose logs --tail=100 api`. Não apague o volume do banco
+para tentar corrigir: apagar o volume remove os dados e pode não resolver a
+causa.
 
 Agora, **no computador**, altere em `src/app.module.ts`:
 
