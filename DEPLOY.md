@@ -43,7 +43,8 @@ para que seus links de confirmação e recuperação funcionem.
 ### O que você vai precisar
 
 1. Uma conta no GitHub com acesso de administrador ao repositório.
-2. Um servidor virtual (**VPS**) com Ubuntu 24.04 LTS e endereço IPv4 público.
+2. Um servidor virtual (**VPS**) com Ubuntu Server 24.04 LTS ou 26.04 LTS e
+   endereço IPv4 público.
 3. Um endereço público para a API: o DNS público do EC2 para testes, ou um
    domínio próprio com acesso à configuração de DNS.
 4. Um serviço de e-mail transacional com SMTP e remetente verificado.
@@ -160,9 +161,10 @@ também rede, armazenamento e custo.
 1. **Name and tags / Nome:** digite `finance-api`. Esse nome é apenas uma
    etiqueta para você encontrar o servidor no painel.
 2. **Application and OS Images / Imagem:** escolha **Ubuntu** e procure uma
-   imagem oficial **Ubuntu Server 24.04 LTS**, publicada pela Canonical, com
-   arquitetura **64-bit (x86)**. Confira o nome da imagem e o fornecedor
-   antes de selecionar; não escolha uma imagem paga de terceiros por engano.
+   imagem oficial **Ubuntu Server 24.04 LTS** ou **26.04 LTS**, publicada pela
+   Canonical, com arquitetura **64-bit (x86)**. Confira o nome da imagem e o
+   fornecedor antes de selecionar; não escolha uma imagem paga de terceiros
+   por engano.
 3. **Instance type / Tipo de instância:** como ponto de partida para um
    experimento pequeno, procure `t3.small`, que tem 2 GiB de memória, e
    confira se o console marca o tipo como **Free tier eligible** para a sua
@@ -524,13 +526,23 @@ WSL, copie-o para a pasta Linux `~/.ssh`, não trabalhe diretamente na pasta
 montada do Windows. A cópia original em Downloads continua existindo: proteja
 ou remova essa cópia com cuidado depois de verificar que a nova funciona.
 
-Antes de conectar, no console EC2 selecione a instância → **Actions → Monitor
-and troubleshoot → Get system log**. Procure `BEGIN SSH HOST KEY
-FINGERPRINTS` e anote a impressão digital da chave de host **ED25519**. Compare
-com a impressão exibida pelo comando SSH antes de aceitar. Se o log não
-mostrar a impressão, aguarde a primeira inicialização e consulte a
-[orientação oficial da AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/connection-prereqs-general.html#connection-prereqs-fingerprint);
-se não conseguir verificá-la por um canal confiável, pare antes de confirmar.
+Antes de conectar, confirme a identidade do servidor para não aceitar uma
+conexão com uma máquina desconhecida:
+
+1. No console da AWS, abra **EC2 → Instances (Instâncias)** e selecione sua
+   instância.
+2. Escolha **Actions → Monitor and troubleshoot → Get system log**.
+3. No log, procure `BEGIN SSH HOST KEY FINGERPRINTS`. Logo abaixo, encontre a
+   linha que termina em `(ED25519)` e anote o valor iniciado por `SHA256:`.
+   Ignore as linhas `(RSA)` e `(ECDSA)`.
+4. No terminal do computador, rode o comando SSH abaixo. Na primeira conexão,
+   o SSH mostrará uma mensagem com a impressão digital ED25519 e perguntará se
+   deseja continuar.
+5. Compare o valor `SHA256:...` mostrado pelo SSH com o que anotou no log da
+   AWS. Só digite `yes` se forem exatamente iguais. Se forem diferentes, ou se
+   não conseguir encontrar a linha ED25519 no log, digite `no`/cancele e não
+   prossiga até verificar a impressão pela
+   [orientação oficial da AWS](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/connection-prereqs-general.html#connection-prereqs-fingerprint).
 
 No computador, conecte-se substituindo `SEU_IP` pelo **Elastic IP**:
 
@@ -551,23 +563,33 @@ sudo usermod -aG sudo deploy
 sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 ```
 
-Agora autorize o mesmo par de chaves para o usuário `deploy`. Não copie a
-chave privada para o servidor. No **computador**, em outro terminal, gere e
-exiba apenas a chave pública correspondente ao arquivo `.pem`:
+Agora configure o acesso SSH do usuário `deploy`. Você vai usar **dois
+terminais**:
+
+- **Terminal do computador:** o terminal aberto no seu próprio computador.
+- **Terminal do servidor:** a sessão SSH que já está conectada como `ubuntu`.
+
+A chave `.pem` é privada: não a envie nem a copie para o servidor. No terminal
+do computador, rode este comando para exibir a chave **pública** correspondente:
 
 ```bash
 ssh-keygen -y -f ~/.ssh/finance-aws.pem
 ```
 
-Copie a linha pública exibida, que começa com `ssh-rsa`. Na sessão original
-conectada como `ubuntu`, execute:
+O comando exibirá uma linha longa começando com `ssh-rsa`. Selecione e copie
+essa linha inteira. Ela é a chave pública; não copie nem compartilhe o
+conteúdo do arquivo `.pem`.
+
+Agora vá para o terminal do servidor, ainda conectado como `ubuntu`. Abra o
+arquivo onde o servidor vai guardar a chave pública:
 
 ```bash
 sudo nano /home/deploy/.ssh/authorized_keys
 ```
 
-Cole a linha pública inteira em uma linha, salve com `Ctrl+O`, Enter e saia com
-`Ctrl+X`. Depois ajuste proprietário e permissões:
+No editor `nano`, cole a linha pública que copiou. Ela deve ficar inteira em
+uma única linha. Para salvar, pressione `Ctrl+O`, depois `Enter`; para sair,
+pressione `Ctrl+X`. Em seguida, ainda no terminal do servidor, execute:
 
 ```bash
 sudo chown deploy:deploy /home/deploy/.ssh/authorized_keys
@@ -596,10 +618,10 @@ sudo apt install -y ca-certificates curl git ufw openssl
 
 ### 4.2 Instale o Docker
 
-Em um Ubuntu novo, siga a seção **Install using the apt repository** da
-[documentação oficial do Docker para Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
-Em uma instância recém-criada com Ubuntu 24.04, no **servidor**, configure a
-chave e o repositório oficial:
+"Ubuntu novo" significa a mesma instância EC2 criada na seção 2; não é para
+instalar outro Ubuntu. Estes passos funcionam para Ubuntu 24.04 LTS e
+26.04 LTS, incluindo a instância 26.04.1 criada neste tutorial. No **servidor**,
+configure a chave e o repositório oficial do Docker:
 
 ```bash
 sudo apt update
@@ -609,18 +631,27 @@ sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyring
 sudo chmod a+r /etc/apt/keyrings/docker.asc
 ```
 
-Crie o arquivo de configuração do repositório:
+Agora crie um pequeno arquivo de configuração para o `apt` saber de onde baixar
+o Docker. No **terminal do servidor**, copie e cole o bloco inteiro abaixo de
+uma vez, desde `sudo tee...` até a linha `EOF`. `EOF` é só o marcador de fim
+do bloco: ele também precisa ser enviado. Não digite os comandos desse bloco um
+por vez.
 
 ```bash
 sudo tee /etc/apt/sources.list.d/docker.sources <<EOF
 Types: deb
 URIs: https://download.docker.com/linux/ubuntu
-Suites: noble
+Suites: $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")
 Components: stable
 Architectures: $(dpkg --print-architecture)
 Signed-By: /etc/apt/keyrings/docker.asc
 EOF
 ```
+
+O comando grava a configuração em `/etc/apt/sources.list.d/docker.sources` e
+mostra o conteúdo criado. No seu Ubuntu 26.04, confira se a linha `Suites:`
+mostrada diz `Suites: resolute`. Se o terminal voltar ao prompt sem mensagem de
+erro, a configuração foi criada.
 
 Agora instale e teste o Docker:
 
@@ -629,8 +660,10 @@ sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 ```
 
-Se a instalação relatar pacotes conflitantes ou Ubuntu diferente de 24.04,
-pare e siga a documentação oficial. Depois:
+Se `apt update` ou a instalação disser que não encontrou os pacotes do Docker,
+confira se a versão do Ubuntu é 24.04 ou 26.04 e siga a
+[documentação oficial do Docker para Ubuntu](https://docs.docker.com/engine/install/ubuntu/).
+Depois:
 
 ```bash
 sudo systemctl enable --now docker
@@ -660,7 +693,14 @@ docker info
 
 ### 4.3 Configure o firewall sem perder o SSH
 
-No servidor, **antes de habilitar o UFW**, libere SSH:
+O firewall é como um porteiro: bloqueia conexões que não foram liberadas. A
+AWS já tem um firewall próprio (grupo de segurança); agora você vai configurar
+também o firewall do Ubuntu, chamado **UFW**. Os dois precisam permitir as
+mesmas portas necessárias. As regras da AWS foram configuradas na seção 2.4.
+
+Faça os passos abaixo no **terminal conectado ao servidor como `deploy`**.
+Primeiro, libere as portas que o tutorial usa: `22` para SSH (sua conexão
+remota), `80` para HTTP e `443` para HTTPS. Só depois ative o firewall:
 
 ```bash
 sudo ufw allow 22/tcp
@@ -670,11 +710,18 @@ sudo ufw enable
 sudo ufw status
 ```
 
-Mantenha também o firewall do fornecedor configurado. Docker pode contornar
-regras UFW em portas publicadas: neste guia **somente** o Caddy publica 80 e
-443. Não publique 3000, 5432, 5050, 8025 ou 1025. Não inicie o
-`docker-compose.yml` de desenvolvimento no servidor: ele expõe o banco,
-inclui pgAdmin com senha padrão e usa Mailpit e modo de desenvolvimento.
+Quando `sudo ufw enable` perguntar se deseja continuar, digite `y` e pressione
+`Enter`. A regra da porta 22 já foi adicionada para preservar o acesso SSH;
+mesmo assim, **não feche este terminal** até confirmar que consegue abrir uma
+segunda conexão SSH. O último comando, `sudo ufw status`, deve mostrar
+`Status: active` e as portas `22/tcp`, `80/tcp` e `443/tcp` como `ALLOW`.
+
+Mantenha também o grupo de segurança da AWS configurado como na seção 2.4.
+Docker pode contornar regras UFW em portas publicadas; neste guia, somente o
+Caddy publica as portas 80 e 443. Não publique as portas `3000`, `5432`,
+`5050`, `8025` ou `1025`. Não inicie o `docker-compose.yml` de desenvolvimento
+no servidor: ele expõe o banco, inclui pgAdmin com senha padrão e usa Mailpit
+e modo de desenvolvimento.
 
 ## 5. Permita que o servidor leia o repositório
 
