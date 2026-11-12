@@ -1,0 +1,48 @@
+name: Deploy producao
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Conectar e atualizar servidor
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -eu
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" 'bash -s' <<'REMOTE'
+          set -eu
+          cd ~/finance/app
+          git fetch origin main
+          git checkout --detach origin/main
+          cd ~/finance/producao
+          docker compose up -d --build api
+          for tentativa in $(seq 1 30); do
+            if docker compose exec -T api node -e 'require("http").get("http://127.0.0.1:3000/", r => { r.resume(); process.exit(r.statusCode === 404 ? 0 : 1); }).on("error", () => process.exit(1))'; then
+              echo "API respondeu; confira os testes funcionais."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "A API nao respondeu como esperado; verifique os logs." >&2
+          exit 1
+          REMOTE
