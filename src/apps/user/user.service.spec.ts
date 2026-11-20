@@ -146,6 +146,7 @@ describe('UserService', () => {
       email: 'test@test.com',
       taxPercentage: 6,
     } as User;
+
     const changes = {
       name: 'Updated User',
       taxPercentage: 8,
@@ -174,12 +175,14 @@ describe('UserService', () => {
       email: 'test@test.com',
       taxPercentage: 6,
     } as User;
+
     const changes = {
       cnpj: '70074043000105',
     };
 
-    userRepoMock.findOne.mockResolvedValue({ cnpj: '70074043000105' });
-    userRepoMock.findOne.mockResolvedValue(existingUser);
+    userRepoMock.findOne
+      .mockResolvedValueOnce(existingUser)
+      .mockResolvedValueOnce({ cnpj: changes.cnpj });
 
     await expect(service.update(userId, changes)).rejects.toThrow(
       'Cnpj já cadastrado',
@@ -190,5 +193,12 @@ describe('UserService', () => {
     });
     expect(userRepoMock.merge).not.toHaveBeenCalled();
     expect(userRepoMock.save).not.toHaveBeenCalled();
+
+    expect(userRepoMock.findOne).toHaveBeenNthCalledWith(1, {
+      where: { id: userId },
+    });
+    expect(userRepoMock.findOne).toHaveBeenNthCalledWith(2, {
+      where: { cnpj: changes.cnpj },
+    });
   });
 });
