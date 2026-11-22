@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { MonthlyClosingController } from './monthly-closing.controller';
 import { MonthlyClosingService } from './monthly-closing.service';
+import { CreateMonthlyClosingDto } from './dto/create-monthly-closing.dto';
 
 describe('MonthlyClosingController', () => {
   let controller: MonthlyClosingController;
@@ -12,6 +13,25 @@ describe('MonthlyClosingController', () => {
     update: jest.fn(),
     delete: jest.fn(),
   };
+
+  const makeCreateDto = (): CreateMonthlyClosingDto => ({
+    closingDate: '2025-01-31',
+    isClosing: false,
+    taxPercentage: 6,
+    operacionalPj: {
+      accountFee: 100,
+      individualContribution: 100,
+      invoice: [{ value: 100 }],
+    },
+    personalExpense: [
+      {
+        name: 'expense test',
+        description: 'expense description test',
+        value: 100,
+        expenseTypeId: '550e8400-e29b-41d4-a716-446655440000',
+      },
+    ],
+  });
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -35,7 +55,7 @@ describe('MonthlyClosingController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('create', async () => {
+  it('create with basic dto', async () => {
     const user = { id: 'user-id' };
     const dto = { closingDate: '2025-01-31', taxPercentage: 6 };
 
@@ -46,6 +66,61 @@ describe('MonthlyClosingController', () => {
       'user-id',
       dto,
     );
+  });
+
+  it('create with complet dto', async () => {
+    const user = { id: 'user-id' };
+
+    const dto = {
+      closingDate: '25-01-31',
+      isClosing: false,
+      taxPercentage: 6,
+      operacionalPj: {
+        accountFee: 100,
+        individualContribuition: 100,
+        invoice: [
+          {
+            value: 100,
+          },
+        ],
+      },
+      personalExpense: [
+        {
+          name: 'expense test',
+          description: 'expense description test',
+          value: 100,
+          expenseTypeId: 'expense-id',
+        },
+      ],
+    };
+
+    await controller.create(user, dto);
+
+    expect(mockMonthlyClosingService.create).toHaveBeenCalledTimes(1);
+    expect(mockMonthlyClosingService.create).toHaveBeenCalledWith(
+      'user-id',
+      dto,
+    );
+  });
+
+  it('crate call the service with dto and return the result', async () => {
+    const user = { id: 'user-id' };
+    const dto = makeCreateDto();
+    const criado = { id: 'closing-id', ...dto };
+
+    mockMonthlyClosingService.create.mockResolvedValue(criado);
+
+    const result = await controller.create(user, dto);
+
+    expect(mockMonthlyClosingService.create).toHaveBeenCalledTimes(1);
+    expect(mockMonthlyClosingService.create).toHaveBeenCalledWith(
+      'user-id',
+      dto,
+    );
+
+    // Se o controller esquecesse o `return`, o teste acima continuaria passando
+    // (o service foi chamado), mas a resposta da API seria undefined.
+    expect(result).toEqual(criado);
   });
 
   it('findAll', async () => {
